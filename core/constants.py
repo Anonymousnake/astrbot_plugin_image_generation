@@ -137,5 +137,3 @@ GITEE_AI_DEFAULT_BASE_URL = "https://ai.gitee.com"
 
 JIMENG_DEFAULT_BASE_URL = "http://localhost:5100"
 """Jimeng2API 默认 Base URL。"""
-
-

@@ -42,7 +42,7 @@ class OpenAIAdapter(BaseImageAdapter):
                 f"{prefix} 提供了参考图但当前模型不支持图生图，仅 GPT Image 系列支持图生图，参考图将被忽略"
             )
         session = self._get_session()
-        base = (self.base_url.rstrip("/") if self.base_url else "https://api.openai.com")
+        base = self.base_url.rstrip("/") if self.base_url else "https://api.openai.com"
         headers = {"Authorization": f"Bearer {self._get_current_api_key()}"}
 
         if use_edit:
@@ -51,11 +51,14 @@ class OpenAIAdapter(BaseImageAdapter):
             form.add_field("model", self.model or "gpt-image-1")
             form.add_field("prompt", request.prompt)
             form.add_field("n", "1")
-            if size := self._map_aspect_ratio_to_size(request.aspect_ratio, gpt_model=True):
+            if size := self._map_aspect_ratio_to_size(
+                request.aspect_ratio, gpt_model=True
+            ):
                 form.add_field("size", size)
             for img in request.images:
                 form.add_field(
-                    "image[]", img.data,
+                    "image[]",
+                    img.data,
                     content_type=img.mime_type,
                     filename="image",
                 )
@@ -67,7 +70,11 @@ class OpenAIAdapter(BaseImageAdapter):
 
         try:
             async with session.post(
-                url, headers=headers, proxy=self.proxy, timeout=self._get_timeout(), **kwargs
+                url,
+                headers=headers,
+                proxy=self.proxy,
+                timeout=self._get_timeout(),
+                **kwargs,
             ) as resp:
                 duration = time.time() - start_time
                 if resp.status != 200:

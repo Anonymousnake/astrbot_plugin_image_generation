@@ -295,7 +295,9 @@ class ConfigManager:
         """重新加载配置。"""
         return self.load()
 
-    def _parse_capability_options(self, provider_item: dict[str, Any]) -> dict[str, bool]:
+    def _parse_capability_options(
+        self, provider_item: dict[str, Any]
+    ) -> dict[str, bool]:
         """解析供应商能力配置（完全由配置驱动）。"""
         raw = provider_item.get("capability_options", [])
 
