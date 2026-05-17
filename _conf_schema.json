@@ -573,6 +573,12 @@
         "hint": "生图成功后,发送消息展示所使用的模型名称",
         "type": "bool",
         "default": false
+      },
+      "start_task_message_template": {
+        "description": "开始生图任务提示模板",
+        "hint": "发送生图任务开始提示。支持占位符：{reference_image_count}参考图数量、{prompt}最终生图提示词、{preset}命中的预设名、{aspect_ratio}宽高比、{resolution}分辨率、{reference_images_block}参考图块、{preset_block}预设块。留空则不发送提示",
+        "type": "text",
+        "default": "已开始生图任务{reference_images_block}{preset_block}"
       }
     }
   },

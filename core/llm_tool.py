@@ -179,6 +179,12 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
         task_id = hashlib.md5(
             f"{time.time()}{event.unified_msg_origin}".encode()
         ).hexdigest()[:8]
+        aspect_ratio = (
+            kwargs.get("aspect_ratio") or plugin.config_manager.default_aspect_ratio
+        )
+        resolution = (
+            kwargs.get("resolution") or plugin.config_manager.default_resolution
+        )
 
         # 创建后台任务进行生图
         plugin.create_background_task(
@@ -186,16 +192,20 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
                 prompt=prompt,
                 images_data=images_data or None,
                 unified_msg_origin=event.unified_msg_origin,
-                aspect_ratio=kwargs.get("aspect_ratio")
-                or plugin.config_manager.default_aspect_ratio,
-                resolution=kwargs.get("resolution")
-                or plugin.config_manager.default_resolution,
+                aspect_ratio=aspect_ratio,
+                resolution=resolution,
                 task_id=task_id,
             )
         )
 
-        mode = "图生图" if images_data else "文生图"
-        return f"✅ 已启动{mode}任务 (任务ID: {task_id})"
+        return plugin.format_start_task_message(
+            prompt=prompt,
+            reference_image_count=len(images_data),
+            preset=None,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            task_id=task_id,
+        )
 
 
 def adjust_tool_parameters(

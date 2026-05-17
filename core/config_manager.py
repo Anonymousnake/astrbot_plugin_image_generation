@@ -54,6 +54,9 @@ class GenerationSettings:
     max_concurrent_tasks: int = 3
     show_generation_info: bool = False
     show_model_info: bool = False
+    start_task_message_template: str = (
+        "已开始生图任务{reference_images_block}{preset_block}"
+    )
 
 
 @dataclass
@@ -164,6 +167,12 @@ class ConfigManager:
             max_concurrent_tasks=max(1, gen_cfg.get("max_concurrent_tasks", 3)),
             show_generation_info=gen_cfg.get("show_generation_info", False),
             show_model_info=gen_cfg.get("show_model_info", False),
+            start_task_message_template=str(
+                gen_cfg.get(
+                    "start_task_message_template",
+                    GenerationSettings.start_task_message_template,
+                )
+            ),
         )
 
         # 安全审核设置
@@ -530,6 +539,11 @@ class ConfigManager:
     def show_model_info(self) -> bool:
         """是否显示模型信息。"""
         return self._plugin_config.generation_settings.show_model_info
+
+    @property
+    def start_task_message_template(self) -> str:
+        """开始生图任务提示模板。"""
+        return self._plugin_config.generation_settings.start_task_message_template
 
     @property
     def usage_settings(self) -> UsageSettings:

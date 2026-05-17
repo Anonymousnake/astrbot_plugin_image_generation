@@ -31,6 +31,11 @@ from .core.usage_manager import UsageManager
 from .core.utils import mask_sensitive, validate_aspect_ratio, validate_resolution
 
 
+class _SafeFormatDict(dict[str, str]):
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
 class ImageGenerationPlugin(Star):
     """图像生成插件主类"""
 
@@ -159,6 +164,51 @@ class ImageGenerationPlugin(Star):
     def create_background_task(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
         """创建后台任务并添加到管理器中。"""
         return self.task_manager.create_task(coro)
+
+    def format_start_task_message(
+        self,
+        *,
+        prompt: str,
+        reference_image_count: int,
+        preset: str | None,
+        aspect_ratio: str,
+        resolution: str,
+        task_id: str,
+    ) -> str:
+        """Render start-task message from configured template."""
+        template = self.config_manager.start_task_message_template
+        if not template.strip():
+            return ""
+
+        model = ""
+        if self.config_manager.adapter_config:
+            model = (
+                f"{self.config_manager.adapter_config.name}/"
+                f"{self.config_manager.adapter_config.model}"
+            )
+
+        values = _SafeFormatDict(
+            reference_image_count=str(reference_image_count),
+            prompt=prompt,
+            preset=preset or "",
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            task_id=task_id,
+            model=model,
+            mode="图生图" if reference_image_count else "文生图",
+            reference_images_block=(
+                f"[{reference_image_count}张参考图]" if reference_image_count else ""
+            ),
+            preset_block=f"[预设: {preset}]" if preset else "",
+        )
+
+        try:
+            return template.format_map(values)
+        except Exception as exc:
+            logger.warning(f"[ImageGen] 开始任务提示模板格式化失败: {exc}")
+            return "已开始生图任务{reference_images_block}{preset_block}".format_map(
+                values
+            )
 
     # ---------------------- 核心生图逻辑 ----------------------
 
@@ -409,14 +459,18 @@ class ImageGenerationPlugin(Star):
         ):
             images_data = await self.image_processor.fetch_images_from_event(event)
 
-        msg = "已开始生图任务"
-        if images_data:
-            msg += f"[{len(images_data)}张参考图]"
-        if matched_preset:
-            msg += f"[预设: {matched_preset}]"
-        yield event.plain_result(msg)
-
         task_id = hashlib.md5(f"{time.time()}{user_id}".encode()).hexdigest()[:8]
+
+        msg = self.format_start_task_message(
+            prompt=prompt,
+            reference_image_count=len(images_data or []),
+            preset=matched_preset,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            task_id=task_id,
+        )
+        if msg:
+            yield event.plain_result(msg)
 
         self.create_background_task(
             self._generate_and_send_image_async(
