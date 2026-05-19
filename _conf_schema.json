@@ -262,6 +262,142 @@
           }
         }
       },
+      "volcengine_ark": {
+        "name": "火山方舟接口",
+        "hint": "使用火山方舟 /api/v3/images/generations 图片生成接口",
+        "display_item": "name",
+        "hide_hint_in_list": true,
+        "items": {
+          "name": {
+            "description": "适配器名称",
+            "hint": "用于区分不同适配器的名称,生图模型格式为 '适配器名称/模型名称'",
+            "type": "string",
+            "default": "火山方舟"
+          },
+          "base_url": {
+            "description": "API Base URL",
+            "hint": "默认 https://ark.cn-beijing.volces.com；也可填写到 /api/v3 或 /api/v3/images/generations 的完整地址",
+            "type": "string",
+            "default": "https://ark.cn-beijing.volces.com"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "hint": "例如: http://127.0.0.1:7890",
+            "type": "string",
+            "default": ""
+          },
+          "api_keys": {
+            "description": "API Keys",
+            "hint": "火山方舟 API Key，按 Bearer Token 发送",
+            "type": "list",
+            "default": []
+          },
+          "available_models": {
+            "description": "可用模型列表",
+            "hint": "用于 /生图模型 命令切换。请按控制台实际 Model ID 或 Endpoint ID 修改。",
+            "type": "list",
+            "default": [
+              "doubao-seedream-5.0-lite",
+              "doubao-seedream-4.5",
+              "doubao-seedream-4.0"
+            ]
+          },
+          "capability_options": {
+            "description": "模型能力",
+            "hint": "Seedream 5.0 lite/4.5/4.0 支持文生图、图生图、宽高比和分辨率。",
+            "type": "list",
+            "options": [
+              "文生图",
+              "图生图",
+              "宽高比",
+              "分辨率"
+            ],
+            "default": [
+              "文生图",
+              "图生图",
+              "宽高比",
+              "分辨率"
+            ]
+          },
+          "timeout": {
+            "description": "生图超时时间覆盖（秒）",
+            "hint": "留空或填 0 表示使用 generation 中的公共超时时间配置",
+            "type": "int",
+            "slider": {
+              "min": 0,
+              "max": 600,
+              "step": 10
+            },
+            "default": 0
+          },
+          "max_retry_attempts": {
+            "description": "最大重试次数覆盖",
+            "hint": "留空或填 0 表示使用 generation 中的公共重试次数配置",
+            "type": "int",
+            "slider": {
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            "default": 0
+          },
+          "watermark": {
+            "description": "添加水印",
+            "hint": "是否在右下角添加“AI生成”水印。",
+            "type": "bool",
+            "default": true
+          },
+          "sequential_image_generation": {
+            "description": "组图模式",
+            "hint": "auto 允许模型按提示词生成组图；disabled 只生成单图。",
+            "type": "string",
+            "options": [
+              "disabled",
+              "auto"
+            ],
+            "default": "disabled"
+          },
+          "sequential_max_images": {
+            "description": "组图最大生成张数",
+            "hint": "仅组图模式为 auto 时生效。输入参考图数量 + 生成图数量不能超过 15。",
+            "type": "int",
+            "slider": {
+              "min": 1,
+              "max": 15,
+              "step": 1
+            },
+            "default": 15
+          },
+          "max_reference_images": {
+            "description": "最大参考图数量",
+            "hint": "Seedream 5.0 lite/4.5/4.0 最多支持 14 张参考图。",
+            "type": "int",
+            "slider": {
+              "min": 1,
+              "max": 14,
+              "step": 1
+            },
+            "default": 14
+          },
+          "optimize_prompt_mode": {
+            "description": "提示词优化模式",
+            "hint": "standard 质量更高但耗时较长；fast 更快但质量一般，部分模型不支持。留空则不发送。",
+            "type": "string",
+            "options": [
+              "",
+              "standard",
+              "fast"
+            ],
+            "default": ""
+          },
+          "enable_web_search": {
+            "description": "启用联网搜索",
+            "hint": "仅 doubao-seedream-5.0-lite 支持。模型会自主判断是否搜索互联网内容。",
+            "type": "bool",
+            "default": false
+          }
+        }
+      },
       "siliconflow_adapter": {
         "name": "硅基流动接口",
         "hint": "使用 SiliconFlow /v1/images/generations 图像生成接口",

@@ -129,6 +129,9 @@ OPENAI_DEFAULT_BASE_URL = "https://api.openai.com"
 SILICONFLOW_DEFAULT_BASE_URL = "https://api.siliconflow.cn"
 """SiliconFlow API 默认 Base URL。"""
 
+VOLCENGINE_ARK_DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com"
+"""火山方舟 API 默认 Base URL。"""
+
 GITEE_AI_DEFAULT_BASE_URL = "https://ai.gitee.com"
 """Gitee AI 默认 Base URL。"""
 

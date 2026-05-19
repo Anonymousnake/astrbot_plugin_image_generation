@@ -42,12 +42,14 @@
 | `gemini`        |   ✅    |   ✅    |   ✅    |   ✅    | Gemini 原生 API                                                                                                  |
 | `gemini_openai` |   ✅    |   ✅    |   ❌    |   ❌    | OpenAI 兼容格式的 Gemini 接口                                                                                    |
 | `openai`        |   ✅    |   ✅    |   ❌    |   ✅    | OpenAI DALL-E 3 / GPT Image 系列（gpt-image-1、gpt-image-1-mini、gpt-image-1.5 等），图生图仅支持 GPT Image 系列 |
+| `volcengine_ark` | ✅ | ✅ | ✅ | ✅ | 火山方舟 Seedream 图片生成接口 `/api/v3/images/generations`，支持文生图、图生图和组图，参考图字段为 `image` |
 | `z_image_gitee` |   ✅    |   ❌    |   ✅    |   ✅    | Gitee AI (z-image-turbo)                                                                                         |
 | `jimeng2api`    |   ✅    |   ✅    |   ✅    |   ✅    | 适用于[iptag/jimeng-api](https://github.com/iptag/jimeng-api)的适配器                                            |
 | `grok`          |   ✅    |   ✅    |   ✅    |   ✅    | Grok(Xai)适配器                                                                                                  |
 | `siliconflow_adapter` | ✅ | ✅ | ✅ | ✅ | SiliconFlow（硅基流动）`/v1/images/generations` 接口，支持 Kolors、Qwen-Image、Qwen-Image-Edit、Z-Image、Z-Image-Turbo，多参考图会映射到 `image`/`image2`/`image3` |
 持续更新中······
 #### 特殊说明
+  - 火山方舟 `volcengine_ark` 的 `available_models` 需要按控制台实际 Model ID 或 Endpoint ID 配置，文档示例名称仅作模板占位。
   - 配置了jimeng2api的话，会在每次启动时和每天凌晨自动领取积分(仅限直接连接即梦逆向,中转途径没有对应接口)
   - jimeng逆向使用了/v1/images/compositions接口,使用中转会导致图生图失败
 #### 欢迎提交 Issue/PR 添加新的适配器类型

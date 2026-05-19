@@ -9,6 +9,7 @@ from .grok_adapter import GrokAdapter
 from .jimeng2api_adapter import Jimeng2APIAdapter
 from .openai_adapter import OpenAIAdapter
 from .siliconflow_adapter import SiliconFlowAdapter
+from .volcengine_ark_adapter import VolcengineArkAdapter
 from .z_image_adapter import ZImageAdapter
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "GeminiOpenAIAdapter",
     "OpenAIAdapter",
     "SiliconFlowAdapter",
+    "VolcengineArkAdapter",
     "ZImageAdapter",
     "Jimeng2APIAdapter",
     "GrokAdapter",

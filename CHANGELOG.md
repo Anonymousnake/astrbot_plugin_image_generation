@@ -1,5 +1,9 @@
 ### 更新日志
 
+- **v1.0.7-2026-05-19**
+  - 新增火山方舟适配器 `volcengine_ark`，支持 Seedream 图片生成接口 `/api/v3/images/generations`。
+  - 支持火山方舟文生图、图生图、组图参数、自动尺寸映射和可选联网搜索配置。
+
 - **v1.0.6-2026-05-18**
   - 新增 SiliconFlow（硅基流动）适配器 `siliconflow_adapter`，支持 `/v1/images/generations` 文生图、图生图和 Qwen-Image-Edit 多参考图。
   - 新增 SiliconFlow 配置模板，内置 Kolors、Qwen-Image、Qwen-Image-Edit 系列模型，按模型自动处理推荐尺寸与图片下载。

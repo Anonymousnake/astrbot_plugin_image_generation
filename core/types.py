@@ -12,6 +12,7 @@ class AdapterType(str, enum.Enum):
     GEMINI_OPENAI = "gemini_openai"
     OPENAI = "openai"
     SILICONFLOW = "siliconflow_adapter"
+    VOLCENGINE_ARK = "volcengine_ark"
     Z_IMAGE = "z_image_gitee"
     JIMENG2API = "jimeng2api"
     GROK = "grok"

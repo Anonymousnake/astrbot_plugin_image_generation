@@ -9,6 +9,7 @@ from ..adapter import (
     Jimeng2APIAdapter,
     OpenAIAdapter,
     SiliconFlowAdapter,
+    VolcengineArkAdapter,
     ZImageAdapter,
 )
 from .types import (
@@ -35,6 +36,7 @@ class ImageGenerator:
             AdapterType.GEMINI_OPENAI: GeminiOpenAIAdapter,
             AdapterType.OPENAI: OpenAIAdapter,
             AdapterType.SILICONFLOW: SiliconFlowAdapter,
+            AdapterType.VOLCENGINE_ARK: VolcengineArkAdapter,
             AdapterType.Z_IMAGE: ZImageAdapter,
             AdapterType.JIMENG2API: Jimeng2APIAdapter,
             AdapterType.GROK: GrokAdapter,
