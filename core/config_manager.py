@@ -519,6 +519,8 @@ class UsageSettings:
     daily_limit_count: int = DEFAULT_DAILY_LIMIT_COUNT
     max_image_size_mb: int = DEFAULT_MAX_IMAGE_SIZE_MB
     umo_blacklist: list[str] = field(default_factory=list)
+    admin_bypass_limits: bool = True
+    umo_whitelist: list[str] = field(default_factory=list)
     blacklist_block_message: str = "❌ 当前会话已被加入黑名单，无法使用生图功能"
 
 
@@ -662,6 +664,8 @@ class ConfigManager:
                 min_value=1,
             ),
             umo_blacklist=self._parse_string_list(cfg.get("umo_blacklist", [])),
+            admin_bypass_limits=self._get_bool(cfg, "admin_bypass_limits", True),
+            umo_whitelist=self._parse_string_list(cfg.get("umo_whitelist", [])),
             blacklist_block_message=self._get_str(
                 cfg,
                 "blacklist_block_message",

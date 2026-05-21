@@ -204,6 +204,14 @@ class ImageGenerationPlugin(Star):
         """创建后台任务并添加到管理器中。"""
         return self.task_manager.create_task(coro)
 
+    def is_usage_limit_admin(self, event: AstrMessageEvent) -> bool:
+        """Return whether an event sender is an AstrBot admin for usage limits."""
+        try:
+            return bool(event.is_admin())
+        except Exception as exc:
+            logger.debug(f"{LOG} 获取管理员状态失败: {exc}")
+            return False
+
     def _find_named_entry(self, entries: dict[str, Any], token: str) -> str | None:
         """Find an entry by exact or case-insensitive name."""
         if token in entries:
@@ -270,6 +278,7 @@ class ImageGenerationPlugin(Star):
         aspect_ratio: str = "1:1",
         resolution: str = "1K",
         task_id: str | None = None,
+        is_usage_limit_admin: bool = False,
     ) -> None:
         """异步生成图片并发送。"""
         if not self.generator or not self.generator.adapter:
@@ -315,13 +324,25 @@ class ImageGenerationPlugin(Star):
         # 使用信号量控制并发
         if self.semaphore is None:
             await self._do_generate_and_send(
-                prompt, unified_msg_origin, images, final_ar, final_res, task_id
+                prompt,
+                unified_msg_origin,
+                images,
+                final_ar,
+                final_res,
+                task_id,
+                is_usage_limit_admin,
             )
             return
 
         async with self.semaphore:
             await self._do_generate_and_send(
-                prompt, unified_msg_origin, images, final_ar, final_res, task_id
+                prompt,
+                unified_msg_origin,
+                images,
+                final_ar,
+                final_res,
+                task_id,
+                is_usage_limit_admin,
             )
 
     async def _do_generate_and_send(
@@ -332,6 +353,7 @@ class ImageGenerationPlugin(Star):
         aspect_ratio: str | None,
         resolution: str | None,
         task_id: str,
+        is_usage_limit_admin: bool,
     ) -> None:
         """执行生成逻辑并发送结果。"""
         start_time = time.time()
@@ -395,7 +417,10 @@ class ImageGenerationPlugin(Star):
             return
 
         # 记录使用次数
-        self.usage_manager.record_usage(unified_msg_origin)
+        self.usage_manager.record_usage(
+            unified_msg_origin,
+            is_admin=is_usage_limit_admin,
+        )
 
         chain = MessageChain()
         for file_path in generated_file_paths:
@@ -414,9 +439,15 @@ class ImageGenerationPlugin(Star):
 
         if self.usage_manager.is_daily_limit_enabled():
             count = self.usage_manager.get_usage_count(unified_msg_origin)
-            info_parts.append(
-                f"📅 今日用量: {count}/{self.usage_manager.get_daily_limit()}"
+            daily_limit = (
+                "∞"
+                if self.usage_manager.is_limit_exempt(
+                    unified_msg_origin,
+                    is_admin=is_usage_limit_admin,
+                )
+                else str(self.usage_manager.get_daily_limit())
             )
+            info_parts.append(f"📅 今日用量: {count}/{daily_limit}")
 
         if info_parts:
             chain.message("\n" + "\n".join(info_parts))
@@ -429,9 +460,13 @@ class ImageGenerationPlugin(Star):
     async def generate_image_command(self, event: AstrMessageEvent):
         """处理生图指令。"""
         user_id = event.unified_msg_origin
+        is_usage_limit_admin = self.is_usage_limit_admin(event)
 
         # 检查频率限制和每日限制
-        check_result = self.usage_manager.check_rate_limit(user_id)
+        check_result = self.usage_manager.check_rate_limit(
+            user_id,
+            is_admin=is_usage_limit_admin,
+        )
         if isinstance(check_result, str):
             if check_result:
                 yield event.plain_result(check_result)
@@ -562,6 +597,7 @@ class ImageGenerationPlugin(Star):
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
                 task_id=task_id,
+                is_usage_limit_admin=is_usage_limit_admin,
             )
         )
 

@@ -79,7 +79,16 @@ class UsageManager:
             return False
         return uid in self._settings.umo_blacklist
 
-    def check_rate_limit(self, user_id: str) -> bool | str:
+    def is_limit_exempt(self, user_id: str, *, is_admin: bool = False) -> bool:
+        """Check whether the current request should bypass usage limits."""
+        uid = user_id.strip()
+        if not uid:
+            return False
+        if self._settings.admin_bypass_limits and is_admin:
+            return True
+        return uid in self._settings.umo_whitelist
+
+    def check_rate_limit(self, user_id: str, *, is_admin: bool = False) -> bool | str:
         """检查用户请求频率限制和每日限制。
 
         返回:
@@ -87,6 +96,9 @@ class UsageManager:
             - str: 错误消息
         """
         # 1. 检查频率限制
+        if self.is_limit_exempt(user_id, is_admin=is_admin):
+            return True
+
         if self.is_session_blocked(user_id):
             return self._settings.blacklist_block_message
 
@@ -110,7 +122,7 @@ class UsageManager:
 
         return True
 
-    def record_usage(self, user_id: str) -> None:
+    def record_usage(self, user_id: str, *, is_admin: bool = False) -> None:
         """记录用户使用次数。"""
         if self._settings.enable_daily_limit:
             today = datetime.date.today().isoformat()

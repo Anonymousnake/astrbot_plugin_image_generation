@@ -888,6 +888,18 @@
         "type": "list",
         "default": []
       },
+      "admin_bypass_limits": {
+        "description": "管理员无视使用限制",
+        "hint": "开启后，AstrBot 管理员可跳过会话黑名单、频率限制和每日额度，但仍会记录每日用量。",
+        "type": "bool",
+        "default": true
+      },
+      "umo_whitelist": {
+        "description": "使用限制白名单 UMO",
+        "hint": "填写 unified_msg_origin（UMO）；命中的会话可跳过会话黑名单、频率限制和每日额度，但仍会记录每日用量。",
+        "type": "list",
+        "default": []
+      },
       "blacklist_block_message": {
         "description": "黑名单拒绝提示",
         "hint": "黑名单命中时返回给用户的文本；留空则不发送。",

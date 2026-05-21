@@ -341,7 +341,11 @@ async def _start_generation_task(
     if not plugin.generator or not plugin.generator.adapter:
         return "❌ 生图生成器未初始化"
 
-    check_result = plugin.usage_manager.check_rate_limit(event.unified_msg_origin)
+    is_usage_limit_admin = plugin.is_usage_limit_admin(event)
+    check_result = plugin.usage_manager.check_rate_limit(
+        event.unified_msg_origin,
+        is_admin=is_usage_limit_admin,
+    )
     if isinstance(check_result, str):
         if check_result:
             masked_uid = mask_sensitive(event.unified_msg_origin)
@@ -395,6 +399,7 @@ async def _start_generation_task(
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             task_id=task_id,
+            is_usage_limit_admin=is_usage_limit_admin,
         )
     )
 
@@ -567,7 +572,14 @@ class PresetQueryTool(FunctionTool[AstrAgentContext]):
             return "❌ 插件未正确初始化 (Plugin instance missing)"
 
         event = _extract_event(context)
-        if event and plugin.usage_manager.is_session_blocked(event.unified_msg_origin):
+        if (
+            event
+            and not plugin.usage_manager.is_limit_exempt(
+                event.unified_msg_origin,
+                is_admin=plugin.is_usage_limit_admin(event),
+            )
+            and plugin.usage_manager.is_session_blocked(event.unified_msg_origin)
+        ):
             return plugin.config_manager.usage_settings.blacklist_block_message
 
         category = _normalize_preset_query_category(
@@ -658,7 +670,14 @@ class PresetEditTool(FunctionTool[AstrAgentContext]):
             return "❌ 插件未正确初始化 (Plugin instance missing)"
 
         event = _extract_event(context)
-        if event and plugin.usage_manager.is_session_blocked(event.unified_msg_origin):
+        if (
+            event
+            and not plugin.usage_manager.is_limit_exempt(
+                event.unified_msg_origin,
+                is_admin=plugin.is_usage_limit_admin(event),
+            )
+            and plugin.usage_manager.is_session_blocked(event.unified_msg_origin)
+        ):
             return plugin.config_manager.usage_settings.blacklist_block_message
 
         action = _normalize_preset_edit_action(
