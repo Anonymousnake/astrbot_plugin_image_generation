@@ -7,7 +7,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
-from ..core.constants import SILICONFLOW_DEFAULT_BASE_URL
+from ..core.constants import SILICONFLOW_DEFAULT_BASE_URL, UNSPECIFIED_OPTION
 from ..core.logging_utils import (
     safe_log_error_body,
     safe_log_mapping,
@@ -135,9 +135,9 @@ class SiliconFlowAdapter(BaseImageAdapter):
 
     def _resolve_image_size(self, request: GenerationRequest) -> str | None:
         """按模型和宽高比解析 SiliconFlow image_size。"""
-        aspect_ratio = request.aspect_ratio or "1:1"
-        if aspect_ratio == "自动":
-            aspect_ratio = "1:1"
+        if not request.aspect_ratio or request.aspect_ratio == UNSPECIFIED_OPTION:
+            return None
+        aspect_ratio = request.aspect_ratio
 
         if self._is_qwen_image_model():
             return self.QWEN_IMAGE_SIZE_MAP.get(aspect_ratio, "1328x1328")

@@ -34,10 +34,16 @@ DEFAULT_DOWNLOAD_TIMEOUT = 30
 DEFAULT_MAX_RETRY_ATTEMPTS = 3
 """默认最大重试次数。"""
 
-DEFAULT_ASPECT_RATIO = "自动"
+UNSPECIFIED_OPTION = "不指定"
+"""表示请求中不携带对应参数的配置选项。"""
+
+LEGACY_AUTO_OPTION = "自动"
+"""旧版“不指定”配置项名称，用于兼容历史配置。"""
+
+DEFAULT_ASPECT_RATIO = UNSPECIFIED_OPTION
 """默认宽高比。"""
 
-DEFAULT_RESOLUTION = "1K"
+DEFAULT_RESOLUTION = UNSPECIFIED_OPTION
 """默认分辨率。"""
 
 DEFAULT_MAX_CONCURRENT_TASKS = 3
@@ -97,7 +103,7 @@ RESOLUTION_2K_MAP = {
 # ========================== 支持的宽高比 ==========================
 
 SUPPORTED_ASPECT_RATIOS = (
-    "自动",
+    UNSPECIFIED_OPTION,
     "1:1",
     "2:3",
     "3:2",
@@ -114,7 +120,7 @@ SUPPORTED_ASPECT_RATIOS = (
 
 # ========================== 支持的分辨率 ==========================
 
-SUPPORTED_RESOLUTIONS = ("1K", "2K", "4K")
+SUPPORTED_RESOLUTIONS = (UNSPECIFIED_OPTION, "1K", "2K", "4K")
 """工具参数中支持的分辨率列表。"""
 
 

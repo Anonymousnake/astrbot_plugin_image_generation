@@ -10,7 +10,7 @@ import aiohttp
 from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
-from ..core.constants import GEMINI_DEFAULT_BASE_URL
+from ..core.constants import GEMINI_DEFAULT_BASE_URL, UNSPECIFIED_OPTION
 from ..core.logging_utils import safe_log_error_body, safe_log_url
 from ..core.types import GenerationRequest, ImageCapability
 
@@ -72,9 +72,13 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         image_config: dict[str, Any] = {}
         generation_config: dict[str, Any] = {}
 
-        if request.aspect_ratio and not request.images:
+        if (
+            request.aspect_ratio
+            and request.aspect_ratio != UNSPECIFIED_OPTION
+            and not request.images
+        ):
             image_config["aspectRatio"] = request.aspect_ratio
-        if request.resolution:
+        if request.resolution and request.resolution != UNSPECIFIED_OPTION:
             image_config["imageSize"] = request.resolution
         if image_config:
             generation_config["imageConfig"] = image_config

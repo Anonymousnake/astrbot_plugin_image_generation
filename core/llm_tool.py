@@ -18,24 +18,13 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
+from .constants import SUPPORTED_ASPECT_RATIOS, SUPPORTED_RESOLUTIONS
 from .logging_utils import log_prefix, mask_sensitive, safe_log_text, safe_log_url
 from .types import ImageCapability
 
 
-ASPECT_RATIO_OPTIONS = [
-    "自动",
-    "1:1",
-    "2:3",
-    "3:2",
-    "3:4",
-    "4:3",
-    "4:5",
-    "5:4",
-    "9:16",
-    "16:9",
-    "21:9",
-]
-RESOLUTION_OPTIONS = ["1K", "2K", "4K"]
+ASPECT_RATIO_OPTIONS = list(SUPPORTED_ASPECT_RATIOS)
+RESOLUTION_OPTIONS = list(SUPPORTED_RESOLUTIONS)
 LOG = log_prefix("LLMTool")
 
 
@@ -461,15 +450,15 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
                 },
                 "aspect_ratio": {
                     "type": "string",
-                    "description": "图片宽高比。如果不确定，请使用'自动'；填写 persona 且未指定时默认按自拍/人像使用 9:16。",
+                    "description": "图片宽高比。如果不确定，请使用'不指定'；填写 persona 且未指定时默认按自拍/人像使用 9:16。",
                     "enum": ASPECT_RATIO_OPTIONS,
-                    "default": "自动",
+                    "default": "不指定",
                 },
                 "resolution": {
                     "type": "string",
-                    "description": "图片质量/分辨率。默认使用 '1K'。",
+                    "description": "图片质量/分辨率。使用'不指定'时请求中不携带分辨率字段。",
                     "enum": RESOLUTION_OPTIONS,
-                    "default": "1K",
+                    "default": "不指定",
                 },
                 "avatar_references": {
                     "type": "array",

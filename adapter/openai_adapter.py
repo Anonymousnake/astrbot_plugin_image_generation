@@ -8,6 +8,7 @@ import aiohttp
 from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
+from ..core.constants import UNSPECIFIED_OPTION
 from ..core.logging_utils import safe_log_error_body
 from ..core.types import GenerationRequest, ImageCapability
 
@@ -114,10 +115,8 @@ class OpenAIAdapter(BaseImageAdapter):
         self, aspect_ratio: str | None, gpt_model: bool
     ) -> str | None:
         """将宽高比映射为 OpenAI 支持的 size 参数。"""
-        if not aspect_ratio or aspect_ratio == "自动":
-            if gpt_model:
-                return "auto"
-            return "1024x1024"
+        if not aspect_ratio or aspect_ratio == UNSPECIFIED_OPTION:
+            return None
 
         if gpt_model:
             # GPT image models 仅支持 auto, 1024x1024, 1536x1024 (横), 1024x1536 (竖)

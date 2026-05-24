@@ -7,7 +7,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
-from ..core.constants import VOLCENGINE_ARK_DEFAULT_BASE_URL
+from ..core.constants import UNSPECIFIED_OPTION, VOLCENGINE_ARK_DEFAULT_BASE_URL
 from ..core.logging_utils import (
     safe_log_error_body,
     safe_log_mapping,
@@ -152,10 +152,16 @@ class VolcengineArkAdapter(BaseImageAdapter):
 
     def _resolve_size(self, request: GenerationRequest) -> str | None:
         """按配置、分辨率和宽高比解析 Ark size 参数。"""
+        if (
+            not request.aspect_ratio
+            or request.aspect_ratio == UNSPECIFIED_OPTION
+            or not request.resolution
+            or request.resolution == UNSPECIFIED_OPTION
+        ):
+            return None
+
         resolution = self._normalize_resolution(request.resolution)
-        aspect_ratio = request.aspect_ratio or "1:1"
-        if aspect_ratio == "自动":
-            aspect_ratio = "1:1"
+        aspect_ratio = request.aspect_ratio
 
         return self.SIZE_MAPS.get(resolution, self.SIZE_MAPS["2K"]).get(
             aspect_ratio, self.SIZE_MAPS[resolution]["1:1"]

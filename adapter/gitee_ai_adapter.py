@@ -12,6 +12,7 @@ from ..core.constants import (
     GITEE_AI_DEFAULT_BASE_URL,
     RESOLUTION_1K_MAP,
     RESOLUTION_2K_MAP,
+    UNSPECIFIED_OPTION,
 )
 from ..core.logging_utils import (
     safe_log_error_body,
@@ -149,9 +150,10 @@ class GiteeAIAdapter(BaseImageAdapter):
         payload: dict[str, Any] = {
             "model": self._model_name(request),
             "prompt": request.prompt,
-            "size": self._resolve_size(request),
             "n": 1,
         }
+        if size := self._resolve_size(request):
+            payload["size"] = size
 
         if request.images:
             self._add_generation_image(payload, request.images)
@@ -171,7 +173,8 @@ class GiteeAIAdapter(BaseImageAdapter):
 
         add_field("model", self._model_name(request))
         add_field("prompt", request.prompt)
-        add_field("size", self._resolve_size(request))
+        if size := self._resolve_size(request):
+            add_field("size", size)
         add_field("n", "1")
 
         for index, image in enumerate(request.images[:1], start=1):
@@ -185,11 +188,21 @@ class GiteeAIAdapter(BaseImageAdapter):
 
         return form, fields
 
-    def _resolve_size(self, request: GenerationRequest) -> str:
+    def _resolve_size(self, request: GenerationRequest) -> str | None:
         """按宽高比和分辨率解析 Gitee AI size 参数。"""
-        aspect_ratio = request.aspect_ratio or "1:1"
-        if aspect_ratio == "自动":
-            aspect_ratio = "1:1"
+        if (
+            not request.aspect_ratio
+            or request.aspect_ratio == UNSPECIFIED_OPTION
+            or not request.resolution
+            or request.resolution == UNSPECIFIED_OPTION
+        ):
+            logger.debug(
+                f"{self._get_log_prefix(request.task_id)} 参数: size=未指定, "
+                f"aspect_ratio={request.aspect_ratio or UNSPECIFIED_OPTION}, "
+                f"resolution={request.resolution or UNSPECIFIED_OPTION}"
+            )
+            return None
+        aspect_ratio = request.aspect_ratio
 
         size = "1024x1024"
         if request.resolution in ("2K", "4K"):
@@ -201,7 +214,7 @@ class GiteeAIAdapter(BaseImageAdapter):
 
         logger.debug(
             f"{self._get_log_prefix(request.task_id)} 参数: size={size}, "
-            f"aspect_ratio={aspect_ratio}, resolution={request.resolution or '1K'}"
+            f"aspect_ratio={aspect_ratio}, resolution={request.resolution}"
         )
         return size
 

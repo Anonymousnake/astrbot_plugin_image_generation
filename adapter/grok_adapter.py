@@ -7,6 +7,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
+from ..core.constants import UNSPECIFIED_OPTION
 from ..core.logging_utils import safe_log_error_body
 from ..core.types import GenerationRequest, ImageCapability
 
@@ -91,14 +92,16 @@ class GrokAdapter(BaseImageAdapter):
         ]
         accept_resolution = ["1k", "2k"]
 
-        ratio = "auto"
-        if request.aspect_ratio in accept_ratio:
+        ratio = None
+        if request.aspect_ratio and request.aspect_ratio in accept_ratio:
             ratio = request.aspect_ratio
-        if request.aspect_ratio == "自动":
-            ratio = "auto"
 
-        resolution = "2k"
-        if request.resolution.lower() in accept_resolution:
+        resolution = None
+        if (
+            request.resolution
+            and request.resolution != UNSPECIFIED_OPTION
+            and request.resolution.lower() in accept_resolution
+        ):
             resolution = request.resolution.lower()
 
         images_ref = []
@@ -114,10 +117,12 @@ class GrokAdapter(BaseImageAdapter):
         payload: dict[str, Any] = {
             "model": self.model or "grok-imagine-image",
             "prompt": request.prompt,
-            "aspect_ratio": ratio,
-            "resolution": resolution,
             "response_format": "b64_json",
         }
+        if ratio:
+            payload["aspect_ratio"] = ratio
+        if resolution:
+            payload["resolution"] = resolution
 
         if len(images_ref) > 0:
             payload.update({"images": images_ref})

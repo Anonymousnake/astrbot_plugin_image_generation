@@ -21,6 +21,8 @@ from .constants import (
     DEFAULT_RATE_LIMIT_SECONDS,
     DEFAULT_RESOLUTION,
     DEFAULT_TIMEOUT,
+    LEGACY_AUTO_OPTION,
+    UNSPECIFIED_OPTION,
 )
 from .logging_utils import log_prefix, safe_log_text
 from .types import AdapterConfig, AdapterType
@@ -70,6 +72,10 @@ class ConfigMigrator:
             "image": "persona_image",
             "reference_image": "persona_image",
         },
+    }
+    VALUE_ALIASES: dict[str, dict[Any, Any]] = {
+        "generation.default_aspect_ratio": {LEGACY_AUTO_OPTION: UNSPECIFIED_OPTION},
+        "generation.default_resolution": {LEGACY_AUTO_OPTION: UNSPECIFIED_OPTION},
     }
     LIST_ADDITIONS_ON_TEMPLATE_MIGRATION: dict[str, dict[str, list[Any]]] = {
         "z_image_gitee": {"capability_options": ["图生图"]},
@@ -406,9 +412,27 @@ class ConfigMigrator:
         value = self._coerce_schema_value(raw, meta_type, default)
         changed = value != raw
 
+        value, alias_changed = self._apply_value_aliases(value, path=path)
+        changed |= alias_changed
+
         value, options_changed = self._normalize_options(value, meta)
         changed |= options_changed
         return value, changed, [f"{path}: normalized by schema"] if changed else []
+
+    def _apply_value_aliases(self, value: Any, *, path: str) -> tuple[Any, bool]:
+        aliases = self._value_aliases_for_path(path)
+        if not aliases:
+            return value, False
+
+        if isinstance(value, list):
+            normalized = [aliases.get(item, item) for item in value]
+            return normalized, normalized != value
+
+        normalized = aliases.get(value, value)
+        return normalized, normalized != value
+
+    def _value_aliases_for_path(self, path: str) -> dict[Any, Any]:
+        return self.VALUE_ALIASES.get(path, {})
 
     def _coerce_schema_value(self, raw: Any, meta_type: str, default: Any) -> Any:
         """Coerce a scalar schema value without applying option filters."""

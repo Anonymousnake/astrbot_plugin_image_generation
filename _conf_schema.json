@@ -829,11 +829,11 @@
       },
       "default_aspect_ratio": {
         "description": "默认宽高比",
-        "hint": "命令生图时默认使用的宽高比；选择“自动”时由模型决定。",
+        "hint": "命令生图时默认使用的宽高比；选择“不指定”时请求中不携带比例字段。",
         "type": "string",
-        "default": "自动",
+        "default": "不指定",
         "options": [
-          "自动",
+          "不指定",
           "1:1",
           "2:3",
           "3:2",
@@ -848,10 +848,11 @@
       },
       "default_resolution": {
         "description": "默认分辨率",
-        "hint": "命令生图时默认使用的分辨率；仅部分模型支持。",
+        "hint": "命令生图时默认使用的分辨率；选择“不指定”时请求中不携带分辨率字段",
         "type": "string",
-        "default": "1K",
+        "default": "不指定",
         "options": [
+          "不指定",
           "1K",
           "2K",
           "4K"

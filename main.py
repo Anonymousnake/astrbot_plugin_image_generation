@@ -34,6 +34,7 @@ from .core.llm_tool import (
     PresetQueryTool,
     adjust_tool_parameters,
 )
+from .core.constants import UNSPECIFIED_OPTION
 from .core.logging_utils import log_prefix, mask_sensitive, safe_log_text
 from .core.safety_auditor import SafetyAuditor
 from .core.task_manager import TaskManager
@@ -299,22 +300,30 @@ class ImageGenerationPlugin(Star):
             )
             images_data = None
 
-        if not (capabilities & ImageCapability.ASPECT_RATIO) and aspect_ratio != "自动":
+        if (
+            not (capabilities & ImageCapability.ASPECT_RATIO)
+            and aspect_ratio != UNSPECIFIED_OPTION
+        ):
             logger.info(
                 f"{task_log} 当前适配器不支持指定比例，已忽略参数: {safe_log_text(aspect_ratio)}"
             )
-            aspect_ratio = "自动"
+            aspect_ratio = UNSPECIFIED_OPTION
 
-        if not (capabilities & ImageCapability.RESOLUTION) and resolution != "1K":
+        if (
+            not (capabilities & ImageCapability.RESOLUTION)
+            and resolution != UNSPECIFIED_OPTION
+        ):
             logger.info(
                 f"{task_log} 当前适配器不支持指定分辨率，已忽略参数: {safe_log_text(resolution)}"
             )
-            resolution = "1K"
+            resolution = UNSPECIFIED_OPTION
 
         final_ar = validate_aspect_ratio(aspect_ratio) or None
-        if final_ar == "自动":
+        if final_ar == UNSPECIFIED_OPTION:
             final_ar = None
         final_res = validate_resolution(resolution)
+        if final_res == UNSPECIFIED_OPTION:
+            final_res = None
 
         images: list[ImageData] = []
         if images_data:

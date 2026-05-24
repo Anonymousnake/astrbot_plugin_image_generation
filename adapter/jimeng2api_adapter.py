@@ -7,6 +7,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
+from ..core.constants import UNSPECIFIED_OPTION
 from ..core.logging_utils import safe_log_error_body, safe_log_mapping
 from ..core.types import GenerationRequest, ImageCapability
 
@@ -57,12 +58,9 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     "prompt": prompt_text,
                     "images": images_as_urls,
                 }
-                if request.aspect_ratio:
-                    if request.aspect_ratio == "自动":
-                        payload["intelligent_ratio"] = True
-                    else:
-                        payload["ratio"] = request.aspect_ratio
-                if request.resolution:
+                if request.aspect_ratio and request.aspect_ratio != UNSPECIFIED_OPTION:
+                    payload["ratio"] = request.aspect_ratio
+                if request.resolution and request.resolution != UNSPECIFIED_OPTION:
                     payload["resolution"] = request.resolution.lower()
 
                 async with session.post(
@@ -96,12 +94,9 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     "prompt": prompt_text,
                     "response_format": "url",  # 默认使用 url，然后下载
                 }
-                if request.aspect_ratio:
-                    if request.aspect_ratio == "自动":
-                        payload["intelligent_ratio"] = True
-                    else:
-                        payload["ratio"] = request.aspect_ratio
-                if request.resolution:
+                if request.aspect_ratio and request.aspect_ratio != UNSPECIFIED_OPTION:
+                    payload["ratio"] = request.aspect_ratio
+                if request.resolution and request.resolution != UNSPECIFIED_OPTION:
                     payload["resolution"] = request.resolution.lower()
 
                 async with session.post(
