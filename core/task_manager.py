@@ -10,7 +10,7 @@ from typing import Any
 
 from astrbot.api import logger
 
-from .logging_utils import log_prefix, safe_log_text
+from .logging_utils import format_optional, format_seconds, log_prefix, safe_log_text
 
 
 LOG = log_prefix("TaskManager")
@@ -97,6 +97,15 @@ def _task_name(name: str) -> str:
     return safe_log_text(name, 80)
 
 
+def _task_elapsed(record: GenerationTaskRecord) -> str:
+    """Return a compact task timing summary for logs."""
+    queued = record.queued_seconds
+    duration = record.duration_seconds
+    if duration is None:
+        return f"排队={format_seconds(queued)}"
+    return f"排队={format_seconds(queued)}，耗时={format_seconds(duration)}"
+
+
 class TaskManager:
     """Unified task manager for background, scheduled, and generation tasks."""
 
@@ -167,8 +176,12 @@ class TaskManager:
         task.add_done_callback(
             functools.partial(self._on_generation_task_done, task_id)
         )
-        logger.info(
-            f"{log_prefix('Task', task_id)} 已提交生图任务，来源: {safe_log_text(source)}"
+        logger.debug(
+            f"{log_prefix('Task', task_id)} 已提交生图任务: "
+            f"来源={safe_log_text(source)}，参考图={reference_image_count}张，"
+            f"宽高比={safe_log_text(aspect_ratio)}，"
+            f"分辨率={safe_log_text(resolution)}，"
+            f"提示词={safe_log_text(prompt, 80)}"
         )
         return record
 
@@ -204,6 +217,10 @@ class TaskManager:
         record.status = GenerationTaskStatus.RUNNING
         record.started_at = record.started_at or datetime.now()
         record.message = "任务运行中"
+        logger.debug(
+            f"{log_prefix('Task', task_id)} 生图任务开始运行: "
+            f"排队={format_seconds(record.queued_seconds)}"
+        )
 
     def mark_generation_task_succeeded(
         self,
@@ -224,6 +241,11 @@ class TaskManager:
         record.result_count = result_count or record.result_count
         if result_paths is not None:
             record.result_paths = list(result_paths)
+        logger.info(
+            f"{log_prefix('Task', task_id)} 生图任务完成: "
+            f"来源={safe_log_text(record.source)}，{_task_elapsed(record)}，"
+            f"结果={record.result_count}张"
+        )
 
     def mark_generation_task_failed(self, task_id: str, error: str) -> None:
         """Mark a generation task as failed."""
@@ -234,6 +256,10 @@ class TaskManager:
         record.finished_at = record.finished_at or datetime.now()
         record.error = safe_log_text(error, 300)
         record.message = "任务失败"
+        logger.warning(
+            f"{log_prefix('Task', task_id)} 生图任务失败: "
+            f"{_task_elapsed(record)}，错误={record.error}"
+        )
 
     def mark_generation_task_cancelled(
         self, task_id: str, reason: str = "任务已取消"
@@ -245,6 +271,10 @@ class TaskManager:
         record.status = GenerationTaskStatus.CANCELLED
         record.finished_at = record.finished_at or datetime.now()
         record.message = reason
+        logger.info(
+            f"{log_prefix('Task', task_id)} 生图任务已取消: "
+            f"{_task_elapsed(record)}，原因={format_optional(reason)}"
+        )
 
     def get_generation_task(self, task_id: str) -> GenerationTaskRecord | None:
         """Return a tracked image generation task by id."""
@@ -285,6 +315,7 @@ class TaskManager:
 
         record.status = GenerationTaskStatus.CANCELLING
         record.message = "正在取消任务"
+        logger.debug(f"{log_prefix('Task', task_id)} 收到取消生图任务请求")
         if record.task and not record.task.done():
             record.task.cancel()
             return True, f"✅ 已请求取消任务: {task_id}"

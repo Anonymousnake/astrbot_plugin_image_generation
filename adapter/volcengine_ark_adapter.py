@@ -112,7 +112,7 @@ class VolcengineArkAdapter(BaseImageAdapter):
                     return None, f"API 错误 ({resp.status})"
 
                 data = await resp.json()
-                logger.info(f"{prefix} 生成成功 (耗时: {duration:.2f}s)")
+                logger.debug(f"{prefix} 生成成功 (耗时: {duration:.2f}s)")
                 return await self._extract_images(data, request.task_id)
         except Exception as exc:  # noqa: BLE001
             duration = time.time() - start_time
@@ -132,7 +132,7 @@ class VolcengineArkAdapter(BaseImageAdapter):
             payload["size"] = size
 
         if request.images:
-            self._add_images(payload, request.images)
+            self._add_images(payload, request.images, request.task_id)
 
         self._add_extra_options(payload)
         return payload
@@ -178,7 +178,9 @@ class VolcengineArkAdapter(BaseImageAdapter):
             return value if value in {"2K", "3K", "4K"} else "2K"
         return value if value in {"2K", "4K"} else "2K"
 
-    def _add_images(self, payload: dict[str, Any], images: list[ImageData]) -> None:
+    def _add_images(
+        self, payload: dict[str, Any], images: list[ImageData], task_id: str | None
+    ) -> None:
         """将参考图添加为 Ark 支持的 data URL。"""
         max_images = self._coerce_int(
             self.config.extra.get("max_reference_images"),
@@ -188,8 +190,8 @@ class VolcengineArkAdapter(BaseImageAdapter):
         )
         selected_images = images[:max_images]
         if len(images) > max_images:
-            logger.info(
-                f"{self._get_log_prefix()} 当前配置最多使用 {max_images} 张参考图，已忽略多余图片"
+            logger.debug(
+                f"{self._get_log_prefix(task_id)} 当前配置最多使用 {max_images} 张参考图，已忽略多余图片"
             )
 
         image_values = [self._to_data_url(image) for image in selected_images]

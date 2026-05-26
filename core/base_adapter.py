@@ -8,7 +8,7 @@ import aiohttp
 from astrbot.api import logger
 
 from .constants import DEFAULT_DOWNLOAD_TIMEOUT
-from .logging_utils import log_prefix, mask_sensitive
+from .logging_utils import log_prefix, mask_sensitive, safe_log_text
 from .types import AdapterConfig, GenerationRequest, GenerationResult, ImageCapability
 
 
@@ -87,7 +87,7 @@ class BaseImageAdapter(abc.ABC):
         """轮换 API Key。"""
         if len(self.api_keys) > 1:
             self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
-            logger.info(
+            logger.debug(
                 f"{self._get_log_prefix()} 轮换 API Key -> 索引 {self.current_key_index}"
             )
 
@@ -104,23 +104,37 @@ class BaseImageAdapter(abc.ABC):
         if not self.api_keys:
             return GenerationResult(images=None, error="未配置 API Key")
 
+        prefix = self._get_log_prefix(request.task_id)
+        logger.debug(
+            f"{prefix} 准备生图请求: 模型={safe_log_text(self.model)}，"
+            f"参考图={len(request.images)}张，最大重试={self.max_retry_attempts}次"
+        )
+
         # 预处理检查（子类可重写）
         pre_result = self._pre_generate(request)
         if pre_result is not None:
+            logger.warning(
+                f"{prefix} 生图请求预检查未通过: {safe_log_text(pre_result.error)}"
+            )
             return pre_result
 
         last_error = "未配置 API Key"
         for attempt in range(self.max_retry_attempts):
             if attempt:
-                logger.info(
-                    f"{self._get_log_prefix(request.task_id)} 重试 ({attempt + 1}/{self.max_retry_attempts})"
+                logger.debug(
+                    f"{prefix} 重试生图请求 ({attempt + 1}/{self.max_retry_attempts})"
                 )
 
             images, err = await self._generate_once(request)
             if images is not None:
+                logger.debug(f"{prefix} 生图请求完成: 图片={len(images)}张")
                 return GenerationResult(images=images, error=None)
 
             last_error = err or "生成失败"
+            logger.warning(
+                f"{prefix} 生图请求尝试失败 ({attempt + 1}/{self.max_retry_attempts}): "
+                f"{safe_log_text(last_error, 200)}"
+            )
             if attempt < self.max_retry_attempts - 1:
                 self._rotate_api_key()
                 # 轮换 Key 时进行指数退避
@@ -129,6 +143,7 @@ class BaseImageAdapter(abc.ABC):
                         min(2 ** ((attempt + 1) // len(self.api_keys)), 10)
                     )
 
+        logger.error(f"{prefix} 生图请求全部重试失败: {safe_log_text(last_error, 200)}")
         return GenerationResult(images=None, error=f"重试失败: {last_error}")
 
     def _pre_generate(self, request: GenerationRequest) -> GenerationResult | None:

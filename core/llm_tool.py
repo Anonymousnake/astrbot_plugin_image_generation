@@ -19,7 +19,13 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from .constants import SUPPORTED_ASPECT_RATIOS, SUPPORTED_RESOLUTIONS
-from .logging_utils import log_prefix, mask_sensitive, safe_log_text, safe_log_url
+from .logging_utils import (
+    format_optional,
+    log_prefix,
+    mask_sensitive,
+    safe_log_text,
+    safe_log_url,
+)
 from .types import ImageCapability
 
 
@@ -276,7 +282,7 @@ def _deduplicate_reference_images(
 
     if duplicate_count:
         task_log = log_prefix("LLMTool", task_id) if task_id else LOG
-        logger.info(f"{task_log} 已忽略 {duplicate_count} 张重复参考图")
+        logger.debug(f"{task_log} 已忽略 {duplicate_count} 张重复参考图")
     return unique_images
 
 
@@ -327,7 +333,9 @@ async def _collect_reference_images(
         avatar_user_ids.add(user_id)
         if avatar_data := await plugin.image_processor.get_avatar(user_id):
             images_data.append((avatar_data, "image/jpeg"))
-            logger.info(f"{task_log} 已添加 {mask_sensitive(user_id)} 的头像作为参考图")
+            logger.debug(
+                f"{task_log} 已添加 {mask_sensitive(user_id)} 的头像作为参考图"
+            )
 
     return _deduplicate_reference_images(images_data, task_id=task_id)
 
@@ -411,6 +419,12 @@ async def _start_generation_task(
         is_usage_limit_admin=is_usage_limit_admin,
         preset=preset_or_persona,
         preset_label=preset_label,
+    )
+    logger.info(
+        f"{log_prefix('Task', task_id)} 已创建生图任务: 来源=LLM工具，"
+        f"用户={mask_sensitive(event.unified_msg_origin)}，"
+        f"参考图={len(images_data)}张，{preset_label}={format_optional(preset_or_persona)}，"
+        f"宽高比={safe_log_text(aspect_ratio)}，分辨率={safe_log_text(resolution)}"
     )
 
     return plugin.format_start_task_message(

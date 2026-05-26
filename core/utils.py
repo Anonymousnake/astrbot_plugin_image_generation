@@ -86,7 +86,7 @@ async def convert_image_format(image_data: bytes, mime_type: str) -> ImageData:
     real_mime = detect_mime_type(image_data)
     if real_mime in SUPPORTED_IMAGE_FORMATS:
         return ImageData(data=image_data, mime_type=real_mime)
-    logger.info(f"{LOG} 正在转换图像格式: {mime_type} -> image/jpeg")
+    logger.debug(f"{LOG} 正在转换图像格式: {mime_type} -> image/jpeg")
     return await asyncio.to_thread(_sync_convert_image_format, image_data, mime_type)
 
 

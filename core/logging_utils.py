@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import urlparse
+import re
+from urllib.parse import parse_qsl, urlparse
 
 from .constants import (
     LOG_PREFIX,
@@ -44,9 +45,47 @@ def safe_log_text(value: object, limit: int = 120) -> str:
     return f"{text[:limit]}...({len(text)} chars)"
 
 
+_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password)"
+    r"([\"']?\s*[:=]\s*[\"']?)"
+    r"([^\"'\s,}]+)"
+)
+_BEARER_RE = re.compile(r"(?i)\bBearer\s+([A-Za-z0-9._~+\-/=]{8,})")
+_DATA_URL_RE = re.compile(r"data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+")
+_LONG_BASE64_RE = re.compile(r"\b[A-Za-z0-9+/]{120,}={0,2}\b")
+
+
 def safe_log_error_body(value: object, limit: int = 200) -> str:
-    """Return a compact provider error body summary for logs."""
-    return safe_log_text(value, limit=limit)
+    """Return a compact provider error body summary for logs.
+
+    The plugin keeps provider error bodies readable for administrators, but still
+    removes values that are almost always secrets or binary payloads.
+    """
+    text = str(value or "")
+    text = _DATA_URL_RE.sub(lambda m: f"data-url({len(m.group(0))} chars)", text)
+    text = _LONG_BASE64_RE.sub(lambda m: f"base64({len(m.group(0))} chars)", text)
+    text = _BEARER_RE.sub(lambda m: f"Bearer {mask_sensitive(m.group(1))}", text)
+
+    def _mask_assignment(match: re.Match[str]) -> str:
+        return f"{match.group(1)}{match.group(2)}{mask_sensitive(match.group(3))}"
+
+    text = _SENSITIVE_ASSIGNMENT_RE.sub(_mask_assignment, text)
+    return safe_log_text(text, limit=limit)
+
+
+def _query_summary(query: str, max_keys: int = 6) -> str:
+    """Return query parameter names without values for URL logs."""
+    if not query:
+        return ""
+    keys: list[str] = []
+    for key, _ in parse_qsl(query, keep_blank_values=True):
+        if key and key not in keys:
+            keys.append(key)
+    if not keys:
+        return f"query_len={len(query)}"
+    visible = keys[:max_keys]
+    suffix = f",+{len(keys) - max_keys}" if len(keys) > max_keys else ""
+    return f"query_keys={','.join(visible)}{suffix};query_len={len(query)}"
 
 
 def safe_log_url(value: object, limit: int = 80) -> str:
@@ -64,13 +103,12 @@ def safe_log_url(value: object, limit: int = 80) -> str:
         path = parsed.path or "/"
         if len(path) > limit:
             path = f"{path[:limit]}..."
-        query = "?..." if parsed.query else ""
+        query = f"?<{_query_summary(parsed.query)}>" if parsed.query else ""
         return f"{parsed.scheme}://{host}{path}{query}"
 
     if parsed.scheme == "file" or os.path.isabs(text) or ":\\" in text:
         normalized_path = text.replace("\\", "/")
-        filename = os.path.basename(normalized_path) or "<path>"
-        return f".../{filename}"
+        return safe_log_text(normalized_path, limit=max(limit, 160))
 
     return safe_log_text(text, limit=limit)
 
@@ -82,3 +120,36 @@ def safe_log_mapping(value: object, limit: int = 120) -> str:
     if isinstance(value, list):
         return f"list(len={len(value)})"
     return safe_log_text(value, limit=limit)
+
+
+def format_seconds(value: float | None) -> str:
+    """Format seconds using Chinese units for human-facing logs."""
+    if value is None:
+        return "未知"
+    return f"{max(0.0, value):.2f}秒"
+
+
+def format_optional(value: object, empty: str = "无", limit: int = 120) -> str:
+    """Format optional values for readable Chinese logs."""
+    text = safe_log_text(value, limit=limit)
+    return text if text else empty
+
+
+def format_log_fields(**fields: object) -> str:
+    """Format optional key-value fields for debug logs."""
+    parts: list[str] = []
+    for key, value in fields.items():
+        if value is None or value == "":
+            continue
+        parts.append(f"{key}={safe_log_text(value, 160)}")
+    return ", ".join(parts)
+
+
+def format_cn_log_fields(**fields: object) -> str:
+    """Format optional fields with Chinese labels for readable logs."""
+    parts: list[str] = []
+    for key, value in fields.items():
+        if value is None or value == "":
+            continue
+        parts.append(f"{key}={safe_log_text(value, 160)}")
+    return "，".join(parts)

@@ -19,7 +19,7 @@ from .types import (
     GenerationResult,
     ImageData,
 )
-from .logging_utils import log_prefix
+from .logging_utils import format_cn_log_fields, log_prefix, safe_log_text
 from .utils import convert_images_batch
 
 
@@ -65,12 +65,22 @@ class ImageGenerator:
             resolution=request.resolution,
             task_id=request.task_id,
         )
+        logger.debug(
+            f"{log_prefix('Generator', request.task_id)} 分发生图请求: "
+            + format_cn_log_fields(
+                适配器=self.adapter.__class__.__name__,
+                模型=self.adapter.model,
+                参考图=f"{len(converted_images)}张",
+                宽高比=request.aspect_ratio,
+                分辨率=request.resolution,
+            )
+        )
 
         try:
             return await self.adapter.generate(patched_request)
         except Exception as exc:  # noqa: BLE001
             logger.error(
-                f"{log_prefix('Generator', request.task_id)} 生成失败: {exc}",
+                f"{log_prefix('Generator', request.task_id)} 生成失败: {safe_log_text(exc, 200)}",
                 exc_info=True,
             )
             return GenerationResult(images=None, error=str(exc))

@@ -40,7 +40,12 @@ from .core.llm_tool import (
     adjust_tool_parameters,
 )
 from .core.constants import UNSPECIFIED_OPTION
-from .core.logging_utils import log_prefix, mask_sensitive, safe_log_text
+from .core.logging_utils import (
+    format_optional,
+    log_prefix,
+    mask_sensitive,
+    safe_log_text,
+)
 from .core.safety_auditor import SafetyAuditor
 from .core.task_manager import GenerationTaskRecord, TaskManager
 from .core.types import GenerationRequest, ImageCapability, ImageData
@@ -102,6 +107,12 @@ class ImageGenerationPlugin(Star):
         if self.config_manager.adapter_config:
             self.generator = ImageGenerator(self.config_manager.adapter_config)
             self.semaphore = asyncio.Semaphore(self.config_manager.max_concurrent_tasks)
+            logger.info(
+                f"{LOG} 初始化生图生成器: "
+                f"供应商={safe_log_text(self.config_manager.adapter_config.name)}，"
+                f"模型={safe_log_text(self.config_manager.adapter_config.model)}，"
+                f"最大并发={self.config_manager.max_concurrent_tasks}"
+            )
         else:
             logger.error(f"{LOG} 适配器配置加载失败，插件未初始化")
 
@@ -397,6 +408,9 @@ class ImageGenerationPlugin(Star):
                 self.task_manager.mark_generation_task_failed(
                     task_id, "生图生成器未初始化"
                 )
+                logger.warning(
+                    f"{log_prefix('Task', task_id)} 生成器未初始化，任务提前结束"
+                )
             return
 
         if not task_id:
@@ -418,7 +432,7 @@ class ImageGenerationPlugin(Star):
             not (capabilities & ImageCapability.ASPECT_RATIO)
             and aspect_ratio != UNSPECIFIED_OPTION
         ):
-            logger.info(
+            logger.debug(
                 f"{task_log} 当前适配器不支持指定比例，已忽略参数: {safe_log_text(aspect_ratio)}"
             )
             aspect_ratio = UNSPECIFIED_OPTION
@@ -427,7 +441,7 @@ class ImageGenerationPlugin(Star):
             not (capabilities & ImageCapability.RESOLUTION)
             and resolution != UNSPECIFIED_OPTION
         ):
-            logger.info(
+            logger.debug(
                 f"{task_log} 当前适配器不支持指定分辨率，已忽略参数: {safe_log_text(resolution)}"
             )
             resolution = UNSPECIFIED_OPTION
@@ -443,6 +457,12 @@ class ImageGenerationPlugin(Star):
         if images_data:
             for data, mime in images_data:
                 images.append(ImageData(data=data, mime_type=mime))
+
+        logger.debug(
+            f"{task_log} 生图请求已规范化: 参考图={len(images)}张，"
+            f"宽高比={safe_log_text(final_ar or UNSPECIFIED_OPTION)}，"
+            f"分辨率={safe_log_text(final_res or UNSPECIFIED_OPTION)}"
+        )
 
         # 使用信号量控制并发
         if self.semaphore is None:
@@ -486,6 +506,11 @@ class ImageGenerationPlugin(Star):
             logger.warning(f"{task_log} 生成器未初始化，跳过生成请求")
             self.task_manager.mark_generation_task_failed(task_id, "生图生成器未初始化")
             return
+        logger.debug(
+            f"{task_log} 调用生图适配器: 参考图={len(images)}张，"
+            f"宽高比={safe_log_text(aspect_ratio or UNSPECIFIED_OPTION)}，"
+            f"分辨率={safe_log_text(resolution or UNSPECIFIED_OPTION)}"
+        )
         result = await self.generator.generate(
             GenerationRequest(
                 prompt=prompt,
@@ -509,11 +534,12 @@ class ImageGenerationPlugin(Star):
             )
             return
 
-        logger.info(
+        logger.debug(
             f"{task_log} 生成成功，耗时: {duration:.2f}s, 图片数量: {len(result.images) if result.images else 0}"
         )
 
         if not result.images:
+            logger.warning(f"{task_log} 模型未返回图片")
             self.task_manager.mark_generation_task_failed(task_id, "模型未返回图片")
             return
 
@@ -562,6 +588,9 @@ class ImageGenerationPlugin(Star):
             unified_msg_origin,
             is_admin=is_usage_limit_admin,
         )
+        logger.debug(
+            f"{task_log} 已记录用量并准备发送结果: 文件={len(generated_file_paths)}个"
+        )
 
         chain = MessageChain()
         for file_path in generated_file_paths:
@@ -604,6 +633,7 @@ class ImageGenerationPlugin(Star):
             chain.message("\n" + "\n".join(info_parts))
 
         await self.context.send_message(unified_msg_origin, chain)
+        logger.debug(f"{task_log} 结果消息已发送")
 
     # ---------------------- 指令处理 ----------------------
 
@@ -658,7 +688,14 @@ class ImageGenerationPlugin(Star):
             yield event.plain_result(f"❌ 正在进行的任务不存在: {task_id}")
             return
 
-        _, message = self.task_manager.cancel_generation_task(record.task_id)
+        _, message = self.task_manager.cancel_generation_task(
+            record.task_id,
+            unified_msg_origin=event.unified_msg_origin,
+        )
+        logger.debug(
+            f"{log_prefix('Task', record.task_id)} 用户请求取消任务: "
+            f"用户={mask_sensitive(event.unified_msg_origin)}，结果={safe_log_text(message)}"
+        )
         yield event.plain_result(message)
 
     @filter.command("生图")
@@ -680,8 +717,8 @@ class ImageGenerationPlugin(Star):
         masked_uid = mask_sensitive(user_id)
 
         user_input = (event.message_str or "").strip()
-        logger.info(
-            f"{LOG} 收到生图指令 - 用户: {masked_uid}, 输入摘要: {safe_log_text(user_input)}"
+        logger.debug(
+            f"{LOG} 收到生图指令: 用户={masked_uid}，输入={safe_log_text(user_input)}"
         )
 
         cmd_parts = user_input.split(maxsplit=1)
@@ -714,7 +751,7 @@ class ImageGenerationPlugin(Star):
                     extra_content = rest
 
         if matched_preset:
-            logger.info(f"{LOG} 命中预设: {safe_log_text(matched_preset)}")
+            logger.debug(f"{LOG} 命中预设: {safe_log_text(matched_preset)}")
             preset_content = self.config_manager.presets[matched_preset]
             try:
                 # 预设支持 JSON 格式配置高级参数
@@ -737,7 +774,7 @@ class ImageGenerationPlugin(Star):
                 prompt = f"{prompt} {extra_content}"
 
         if matched_persona:
-            logger.info(f"{LOG} 命中人设: {safe_log_text(matched_persona)}")
+            logger.debug(f"{LOG} 命中人设: {safe_log_text(matched_persona)}")
             persona = self.config_manager.personas[matched_persona]
             prompt = persona.prompt
             persona_image = persona.image
@@ -752,6 +789,9 @@ class ImageGenerationPlugin(Star):
             prompt, event.unified_msg_origin
         )
         if not prompt_allowed:
+            logger.warning(
+                f"{LOG} 提示词审核未通过: 用户={masked_uid}, 原因={safe_log_text(prompt_reason, 160)}"
+            )
             yield event.plain_result(f"❌ 提示词审核未通过: {prompt_reason}")
             return
 
@@ -793,6 +833,11 @@ class ImageGenerationPlugin(Star):
         )
         if msg:
             yield event.plain_result(msg)
+        logger.info(
+            f"{task_log} 已创建生图任务: 来源=指令，用户={masked_uid}，"
+            f"参考图={len(images_data or [])}张，预设={format_optional(matched_preset or matched_persona)}，"
+            f"宽高比={safe_log_text(aspect_ratio)}，分辨率={safe_log_text(resolution)}"
+        )
 
         self.create_generation_task(
             task_id=task_id,

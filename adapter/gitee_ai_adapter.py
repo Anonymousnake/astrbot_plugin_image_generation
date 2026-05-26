@@ -77,8 +77,8 @@ class GiteeAIAdapter(BaseImageAdapter):
         """记录 Gitee AI 请求概要。"""
         prefix = self._get_log_prefix(request.task_id)
         mode = "图片编辑" if self._should_use_edits(request) else "文本生成图片"
-        logger.info(
-            f"{prefix} 开始{mode}: prompt='{safe_log_text(request.prompt, 50)}', model='{self._model_name(request)}'"
+        logger.debug(
+            f"{prefix} 开始{mode}: 提示词={safe_log_text(request.prompt, 120)}，模型={self._model_name(request)}"
         )
         return None
 
@@ -126,7 +126,7 @@ class GiteeAIAdapter(BaseImageAdapter):
                     return None, f"API 错误 ({resp.status})"
 
                 data = await resp.json()
-                logger.info(f"{prefix} 生成成功 (耗时: {duration:.2f}s)")
+                logger.debug(f"{prefix} 生成成功 (耗时: {duration:.2f}s)")
                 return await self._extract_images(data, request.task_id)
         except Exception as e:  # noqa: BLE001
             duration = time.time() - start_time
@@ -156,7 +156,7 @@ class GiteeAIAdapter(BaseImageAdapter):
             payload["size"] = size
 
         if request.images:
-            self._add_generation_image(payload, request.images)
+            self._add_generation_image(payload, request.images, request.task_id)
 
         return payload
 
@@ -198,8 +198,8 @@ class GiteeAIAdapter(BaseImageAdapter):
         ):
             logger.debug(
                 f"{self._get_log_prefix(request.task_id)} 参数: size=未指定, "
-                f"aspect_ratio={request.aspect_ratio or UNSPECIFIED_OPTION}, "
-                f"resolution={request.resolution or UNSPECIFIED_OPTION}"
+                f"宽高比={request.aspect_ratio or UNSPECIFIED_OPTION}, "
+                f"分辨率={request.resolution or UNSPECIFIED_OPTION}"
             )
             return None
         aspect_ratio = request.aspect_ratio
@@ -214,19 +214,19 @@ class GiteeAIAdapter(BaseImageAdapter):
 
         logger.debug(
             f"{self._get_log_prefix(request.task_id)} 参数: size={size}, "
-            f"aspect_ratio={aspect_ratio}, resolution={request.resolution}"
+            f"宽高比={aspect_ratio}, 分辨率={request.resolution}"
         )
         return size
 
     def _add_generation_image(
-        self, payload: dict[str, Any], images: list[ImageData]
+        self, payload: dict[str, Any], images: list[ImageData], task_id: str | None
     ) -> None:
         """为 /images/generations 添加参考图。"""
         if not images:
             return
         if len(images) > 1:
-            logger.info(
-                f"{self._get_log_prefix()} /images/generations 仅发送第一张参考图"
+            logger.debug(
+                f"{self._get_log_prefix(task_id)} /images/generations 仅发送第一张参考图"
             )
         payload["image"] = base64.b64encode(images[0].data).decode("ascii")
 
@@ -323,7 +323,7 @@ class GiteeAIAdapter(BaseImageAdapter):
         if not images:
             return None, "未生成任何图像"
 
-        logger.info(f"{prefix} 成功提取 {len(images)} 张图像")
+        logger.debug(f"{prefix} 成功提取 {len(images)} 张图像")
         return images, None
 
     def _decode_base64_image(

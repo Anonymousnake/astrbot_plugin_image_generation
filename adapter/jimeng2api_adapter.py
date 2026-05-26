@@ -8,7 +8,7 @@ from astrbot.api import logger
 
 from ..core.base_adapter import BaseImageAdapter
 from ..core.constants import UNSPECIFIED_OPTION
-from ..core.logging_utils import safe_log_error_body, safe_log_mapping
+from ..core.logging_utils import safe_log_error_body, safe_log_mapping, safe_log_url
 from ..core.types import GenerationRequest, ImageCapability
 
 
@@ -82,7 +82,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     logger.debug(
                         f"{prefix} Compositions 响应: {safe_log_mapping(data_json)}"
                     )
-                    logger.info(f"{prefix} Compositions 成功 (耗时: {duration:.2f}s)")
+                    logger.debug(f"{prefix} Compositions 成功 (耗时: {duration:.2f}s)")
                     return await self._extract_images(data_json, request.task_id)
             else:
                 # 文生图
@@ -118,7 +118,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     logger.debug(
                         f"{prefix} Generations 响应: {safe_log_mapping(data_json)}"
                     )
-                    logger.info(f"{prefix} Generations 成功 (耗时: {duration:.2f}s)")
+                    logger.debug(f"{prefix} Generations 成功 (耗时: {duration:.2f}s)")
                     return await self._extract_images(data_json, request.task_id)
 
         except Exception as e:
@@ -152,7 +152,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                         images.append(await resp.read())
                     else:
                         logger.error(
-                            f"{prefix} 下载图像失败 ({resp.status}): {item['url']}"
+                            f"{prefix} 下载图像失败 ({resp.status}): {safe_log_url(item['url'])}"
                         )
 
         if not images:

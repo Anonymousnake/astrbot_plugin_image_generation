@@ -88,7 +88,7 @@ class SiliconFlowAdapter(BaseImageAdapter):
                     return None, f"API 错误 ({resp.status})"
 
                 data = await resp.json()
-                logger.info(f"{prefix} 生成成功 (耗时: {duration:.2f}s)")
+                logger.debug(f"{prefix} 生成成功 (耗时: {duration:.2f}s)")
                 return await self._extract_images(data, request.task_id)
         except Exception as exc:  # noqa: BLE001
             duration = time.time() - start_time
@@ -110,7 +110,7 @@ class SiliconFlowAdapter(BaseImageAdapter):
                 payload["image_size"] = image_size
 
         if request.images:
-            self._add_images(payload, request.images)
+            self._add_images(payload, request.images, request.task_id)
 
         return payload
 
@@ -143,12 +143,14 @@ class SiliconFlowAdapter(BaseImageAdapter):
             return self.QWEN_IMAGE_SIZE_MAP.get(aspect_ratio, "1328x1328")
         return self.KOLORS_IMAGE_SIZE_MAP.get(aspect_ratio, "1024x1024")
 
-    def _add_images(self, payload: dict[str, Any], images: list[ImageData]) -> None:
+    def _add_images(
+        self, payload: dict[str, Any], images: list[ImageData], task_id: str | None
+    ) -> None:
         """将参考图添加为 SiliconFlow 支持的 data URL。"""
         max_images = 3 if self._is_qwen_edit_model() else 1
         if len(images) > max_images:
-            logger.info(
-                f"{self._get_log_prefix()} 当前模型最多使用 {max_images} 张参考图，已忽略多余图片"
+            logger.debug(
+                f"{self._get_log_prefix(task_id)} 当前模型最多使用 {max_images} 张参考图，已忽略多余图片"
             )
 
         field_names = ("image", "image2", "image3")
