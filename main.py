@@ -41,7 +41,6 @@ from .core.llm_tool import (
 )
 from .core.constants import UNSPECIFIED_OPTION
 from .core.logging_utils import (
-    format_optional,
     log_prefix,
     mask_sensitive,
     safe_log_text,
@@ -833,11 +832,6 @@ class ImageGenerationPlugin(Star):
         )
         if msg:
             yield event.plain_result(msg)
-        logger.info(
-            f"{task_log} 已创建生图任务: 来源=指令，用户={masked_uid}，"
-            f"参考图={len(images_data or [])}张，预设={format_optional(matched_preset or matched_persona)}，"
-            f"宽高比={safe_log_text(aspect_ratio)}，分辨率={safe_log_text(resolution)}"
-        )
 
         self.create_generation_task(
             task_id=task_id,

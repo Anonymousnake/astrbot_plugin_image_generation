@@ -10,7 +10,13 @@ from typing import Any
 
 from astrbot.api import logger
 
-from .logging_utils import format_optional, format_seconds, log_prefix, safe_log_text
+from .logging_utils import (
+    format_optional,
+    format_seconds,
+    log_prefix,
+    mask_sensitive,
+    safe_log_text,
+)
 
 
 LOG = log_prefix("TaskManager")
@@ -106,6 +112,18 @@ def _task_elapsed(record: GenerationTaskRecord) -> str:
     return f"排队={format_seconds(queued)}，耗时={format_seconds(duration)}"
 
 
+def _task_creation_summary(record: GenerationTaskRecord) -> str:
+    """Return a compact creation summary for generation task logs."""
+    return (
+        f"来源={safe_log_text(record.source)}，"
+        f"用户={mask_sensitive(record.unified_msg_origin)}，"
+        f"参考图={record.reference_image_count}张，"
+        f"{record.preset_label}={format_optional(record.preset)}，"
+        f"宽高比={safe_log_text(record.aspect_ratio)}，"
+        f"分辨率={safe_log_text(record.resolution)}"
+    )
+
+
 class TaskManager:
     """Unified task manager for background, scheduled, and generation tasks."""
 
@@ -176,11 +194,12 @@ class TaskManager:
         task.add_done_callback(
             functools.partial(self._on_generation_task_done, task_id)
         )
+        logger.info(
+            f"{log_prefix('Task', task_id)} 已创建生图任务: "
+            f"{_task_creation_summary(record)}"
+        )
         logger.debug(
-            f"{log_prefix('Task', task_id)} 已提交生图任务: "
-            f"来源={safe_log_text(source)}，参考图={reference_image_count}张，"
-            f"宽高比={safe_log_text(aspect_ratio)}，"
-            f"分辨率={safe_log_text(resolution)}，"
+            f"{log_prefix('Task', task_id)} 生图任务提示词摘要: "
             f"提示词={safe_log_text(prompt, 80)}"
         )
         return record
