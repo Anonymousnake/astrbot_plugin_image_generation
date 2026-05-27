@@ -71,6 +71,8 @@ class GenerationTaskRecord:
     error: str = ""
     result_count: int = 0
     result_paths: list[str] = field(default_factory=list)
+    retry_attempt: int = 0
+    max_retry_attempts: int = 0
     task: asyncio.Task | None = field(default=None, repr=False, compare=False)
 
     @property
@@ -240,6 +242,20 @@ class TaskManager:
             f"{log_prefix('Task', task_id)} 生图任务开始运行: "
             f"排队={format_seconds(record.queued_seconds)}"
         )
+
+    def update_generation_task_retry_status(
+        self,
+        task_id: str,
+        *,
+        retry_attempt: int,
+        max_retry_attempts: int,
+    ) -> None:
+        """Update the currently running generation retry attempt."""
+        record = self._generation_tasks.get(task_id)
+        if not record:
+            return
+        record.retry_attempt = max(0, retry_attempt)
+        record.max_retry_attempts = max(0, max_retry_attempts)
 
     def mark_generation_task_succeeded(
         self,

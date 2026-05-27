@@ -120,6 +120,8 @@ class BaseImageAdapter(abc.ABC):
 
         last_error = "未配置 API Key"
         for attempt in range(self.max_retry_attempts):
+            if request.retry_status_callback:
+                request.retry_status_callback(attempt + 1, self.max_retry_attempts)
             if attempt:
                 logger.debug(
                     f"{prefix} 重试生图请求 ({attempt + 1}/{self.max_retry_attempts})"

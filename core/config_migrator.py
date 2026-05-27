@@ -12,6 +12,9 @@ from .config_defaults import (
     DEFAULT_PROMPT_AUDIT_PROMPT,
     LEGACY_IMAGE_AUDIT_PROMPTS,
     LEGACY_PROMPT_AUDIT_PROMPTS,
+    LLM_TOOL_IMAGE_GENERATION,
+    LLM_TOOL_PRESET_QUERY,
+    LLM_TOOL_TASK_MANAGEMENT,
 )
 from .constants import LEGACY_AUTO_OPTION, UNSPECIFIED_OPTION
 
@@ -75,6 +78,17 @@ class ConfigMigrator:
         self, config: dict[str, Any], messages: list[str]
     ) -> bool:
         value = config.get("enable_llm_tool")
+        if isinstance(value, list):
+            old_default_tools = {LLM_TOOL_IMAGE_GENERATION, LLM_TOOL_PRESET_QUERY}
+            if (
+                set(value) == old_default_tools
+                and LLM_TOOL_TASK_MANAGEMENT not in value
+            ):
+                value.append(LLM_TOOL_TASK_MANAGEMENT)
+                messages.append("enable_llm_tool: add task management tool")
+                return True
+            return False
+
         if not isinstance(value, bool):
             return False
 

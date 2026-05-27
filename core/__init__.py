@@ -33,6 +33,7 @@ from .generator import ImageGenerator
 from .image_processor import ImageProcessor
 from .llm_tool import (
     ImageGenerationTool,
+    ImageTaskTool,
     PresetEditTool,
     PresetQueryTool,
     adjust_tool_parameters,
@@ -83,6 +84,7 @@ __all__ = [
     "SafetyAuditSettings",
     # LLM 工具
     "ImageGenerationTool",
+    "ImageTaskTool",
     "PresetQueryTool",
     "PresetEditTool",
     "adjust_tool_parameters",

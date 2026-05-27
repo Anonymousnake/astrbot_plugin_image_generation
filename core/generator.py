@@ -64,6 +64,7 @@ class ImageGenerator:
             aspect_ratio=request.aspect_ratio,
             resolution=request.resolution,
             task_id=request.task_id,
+            retry_status_callback=request.retry_status_callback,
         )
         logger.debug(
             f"{log_prefix('Generator', request.task_id)} 分发生图请求: "

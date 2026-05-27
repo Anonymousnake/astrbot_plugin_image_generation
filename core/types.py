@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -71,6 +72,11 @@ class GenerationRequest:
     aspect_ratio: str | None = None
     resolution: str | None = None
     task_id: str | None = None
+    retry_status_callback: Callable[[int, int], None] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
 
 @dataclass

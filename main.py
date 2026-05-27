@@ -24,6 +24,7 @@ from .core.config_manager import (
     LLM_TOOL_IMAGE_GENERATION,
     LLM_TOOL_PRESET_EDIT,
     LLM_TOOL_PRESET_QUERY,
+    LLM_TOOL_TASK_MANAGEMENT,
     ConfigManager,
     RESULT_INFO_COUNT,
     RESULT_INFO_DURATION,
@@ -36,6 +37,7 @@ from .core.image_processor import ImageProcessor
 from .core.llm_result_handler import LLMResultHandler
 from .core.llm_tool import (
     ImageGenerationTool,
+    ImageTaskTool,
     PresetEditTool,
     PresetQueryTool,
     adjust_tool_parameters,
@@ -167,6 +169,9 @@ class ImageGenerationPlugin(Star):
 
         if self.config_manager.is_llm_tool_enabled(LLM_TOOL_PRESET_QUERY):
             tools.append(PresetQueryTool(plugin=self))
+
+        if self.config_manager.is_llm_tool_enabled(LLM_TOOL_TASK_MANAGEMENT):
+            tools.append(ImageTaskTool(plugin=self))
 
         if self.config_manager.is_llm_tool_enabled(LLM_TOOL_PRESET_EDIT):
             tools.append(PresetEditTool(plugin=self))
@@ -492,6 +497,8 @@ class ImageGenerationPlugin(Star):
         lines.append(f"提示词: {record.prompt_summary or '无'}")
         lines.append(f"参考图: {record.reference_image_count}张")
         lines.append(f"宽高比: {record.aspect_ratio}，分辨率: {record.resolution}")
+        if record.max_retry_attempts:
+            lines.append(f"重试: {record.retry_attempt}/{record.max_retry_attempts}")
         if record.preset:
             lines.append(f"{record.preset_label}: {record.preset}")
 
@@ -684,6 +691,12 @@ class ImageGenerationPlugin(Star):
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
                 task_id=task_id,
+                retry_status_callback=lambda retry_attempt,
+                max_retry_attempts: self.task_manager.update_generation_task_retry_status(
+                    task_id,
+                    retry_attempt=retry_attempt,
+                    max_retry_attempts=max_retry_attempts,
+                ),
             )
         )
         end_time = time.time()

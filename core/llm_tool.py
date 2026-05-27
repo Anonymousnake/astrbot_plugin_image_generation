@@ -138,6 +138,18 @@ def _normalize_preset_edit_action(action: str) -> str:
     return normalized
 
 
+def _normalize_task_action(action: str) -> str:
+    """Normalize image task management action aliases."""
+    normalized = action.strip().lower()
+    if normalized in {"", "列表", "查看列表", "list", "list_tasks", "tasks"}:
+        return "list"
+    if normalized in {"详情", "查看", "查询", "detail", "get", "show"}:
+        return "detail"
+    if normalized in {"取消", "cancel", "cancel_task"}:
+        return "cancel"
+    return normalized
+
+
 def _format_preset_detail(name: str, content: Any) -> str:
     """Format one preset's full content for query results."""
     content_text = str(content or "").strip()
@@ -722,6 +734,100 @@ class PresetQueryTool(FunctionTool[AstrAgentContext]):
         for idx, preset_name in enumerate(plugin.config_manager.presets, 1):
             lines.append(f"{idx}. {preset_name}")
         return "\n".join(lines)
+
+
+@pydantic_dataclass
+class ImageTaskTool(FunctionTool[AstrAgentContext]):
+    """LLM 可调用的生图任务管理工具。"""
+
+    name: str = "manage_image_tasks"
+    description: str = (
+        "管理当前会话的生图任务。可查看正在进行的任务列表、查看任务详情，"
+        "或取消仍在排队/运行/取消中的任务。"
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "操作类型。list 查看任务列表；detail 查看任务详情；cancel 取消任务。默认 list。",
+                    "enum": ["list", "detail", "cancel"],
+                    "default": "list",
+                },
+                "task": {
+                    "type": "string",
+                    "description": "任务编号或任务ID。detail 和 cancel 时填写；编号来自 list 返回的列表序号。",
+                },
+            },
+            "required": [],
+        }
+    )
+
+    plugin: Any = None
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
+    ) -> ToolExecResult:
+        """执行生图任务管理工具调用。"""
+        plugin = self.plugin
+        if not plugin:
+            return "❌ 插件未正确初始化 (Plugin instance missing)"
+
+        event = _extract_event(context)
+        if not event:
+            logger.warning(
+                f"{LOG} 任务工具调用上下文缺少事件。上下文类型: {type(context)}"
+            )
+            return "❌ 无法获取当前消息上下文"
+
+        unified_msg_origin = event.unified_msg_origin
+        action = _normalize_task_action(str(kwargs.get("action", "list") or "list"))
+        task_ref = str(kwargs.get("task", "") or "").strip()
+
+        if action == "list":
+            records = plugin.task_manager.list_generation_tasks(
+                unified_msg_origin=unified_msg_origin,
+                include_finished=False,
+                limit=10,
+            )
+            return plugin.format_task_list(records)
+
+        if action == "detail":
+            if not task_ref:
+                return "❌ 请提供要查看的任务编号或任务ID"
+            record = plugin.resolve_active_task_reference(unified_msg_origin, task_ref)
+            if not record:
+                return f"❌ 正在进行的任务不存在: {task_ref}"
+            return plugin.format_task_detail(record)
+
+        if action == "cancel":
+            if not task_ref:
+                active_records = plugin.task_manager.list_generation_tasks(
+                    unified_msg_origin=unified_msg_origin,
+                    include_finished=False,
+                    limit=5,
+                )
+                if active_records:
+                    return "❌ 请提供要取消的任务ID\n" + plugin.format_task_list(
+                        active_records
+                    )
+                return "📭 当前没有可取消的生图任务"
+
+            record = plugin.resolve_active_task_reference(unified_msg_origin, task_ref)
+            if not record:
+                return f"❌ 正在进行的任务不存在: {task_ref}"
+            _, message = plugin.task_manager.cancel_generation_task(
+                record.task_id,
+                unified_msg_origin=unified_msg_origin,
+            )
+            logger.debug(
+                f"{log_prefix('Task', record.task_id)} LLM 工具请求取消任务: "
+                f"用户={mask_sensitive(unified_msg_origin)}，结果={safe_log_text(message)}"
+            )
+            return message
+
+        return "❌ 不支持的操作，请使用 list、detail 或 cancel"
 
 
 @pydantic_dataclass
