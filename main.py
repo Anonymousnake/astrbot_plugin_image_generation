@@ -315,34 +315,15 @@ class ImageGenerationPlugin(Star):
         return max(1, min(count, self.config_manager.max_image_count))
 
     def _parse_command_image_count(self, prompt: str) -> tuple[int, str]:
-        """Parse optional image count from command prompt prefix."""
+        """Parse optional image count from command prompt suffix."""
         raw_prompt = prompt.strip()
         default_count = self.config_manager.default_image_count
         if not raw_prompt:
             return default_count, ""
 
-        parts = raw_prompt.split(maxsplit=1)
-        first = parts[0].strip()
-        rest = parts[1].strip() if len(parts) > 1 else ""
-        count_keys = {"数量", "张数", "出图", "count", "image_count", "n"}
-
-        for sep in ("=", ":", "："):
-            if sep not in first:
-                continue
-            key, value = first.split(sep, 1)
-            if key.strip().lower() in count_keys:
-                return self.normalize_image_count(
-                    value.strip().removesuffix("张")
-                ), rest
-
-        if first.lower() in {"-n", "--count", "--数量", *count_keys} and rest:
-            value_parts = rest.split(maxsplit=1)
-            count_value = value_parts[0].strip().removesuffix("张")
-            remaining_prompt = value_parts[1].strip() if len(value_parts) > 1 else ""
-            return self.normalize_image_count(count_value), remaining_prompt
-
-        if first.endswith("张") and first[:-1].isdigit():
-            return self.normalize_image_count(first[:-1]), rest
+        tokens = raw_prompt.split()
+        if tokens[-1].isdecimal():
+            return self.normalize_image_count(tokens[-1]), " ".join(tokens[:-1]).strip()
 
         return default_count, raw_prompt
 
