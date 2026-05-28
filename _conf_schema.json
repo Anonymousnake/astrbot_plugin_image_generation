@@ -1009,6 +1009,17 @@
             "default": "",
             "_special": "select_provider"
           },
+          "max_retry_attempts": {
+            "description": "审核模型重试次数",
+            "hint": "审核模型调用失败、返回为空或无法解析时的最大尝试次数。",
+            "type": "int",
+            "slider": {
+              "min": 1,
+              "max": 10,
+              "step": 1
+            },
+            "default": 3
+          },
           "ai_prompt": {
             "description": "AI 审核提示词",
             "hint": "发送给审核模型的提示词；支持 {prompt} 占位符，未包含时会自动附加用户提示词。",
@@ -1033,6 +1044,17 @@
             "type": "string",
             "default": "",
             "_special": "select_provider"
+          },
+          "max_retry_attempts": {
+            "description": "审核模型重试次数",
+            "hint": "审核模型调用失败、返回为空或无法解析时的最大尝试次数。",
+            "type": "int",
+            "slider": {
+              "min": 1,
+              "max": 10,
+              "step": 1
+            },
+            "default": 3
           },
           "ai_prompt": {
             "description": "AI 审核提示词",
@@ -1063,7 +1085,7 @@
         ]
       },
       "personas": {
-        "description": "人设模板",
+        "description": "人设模板(暂不可用,请等待 #8228 修复合并入AstrBot)",
         "hint": "配置固定人设描述和参考图；使用 /生图 <人设名称> [额外提示词] 时自动应用。",
         "type": "template_list",
         "default": [],

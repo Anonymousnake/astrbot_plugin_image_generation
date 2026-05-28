@@ -11,23 +11,22 @@ from astrbot.api import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 from .constants import (
+    ALL_LLM_TOOLS,
+    ALL_RESULT_INFO_ITEMS,
     DEFAULT_ASPECT_RATIO,
+    DEFAULT_AUDIT_MAX_RETRY_ATTEMPTS,
     DEFAULT_DAILY_LIMIT_COUNT,
     DEFAULT_GENERATION_IMAGE_COUNT,
+    DEFAULT_IMAGE_AUDIT_PROMPT,
     DEFAULT_MAX_GENERATION_IMAGE_COUNT,
     DEFAULT_MAX_CONCURRENT_TASKS,
     DEFAULT_MAX_IMAGE_SIZE_MB,
     DEFAULT_MAX_RETRY_ATTEMPTS,
+    DEFAULT_PROMPT_AUDIT_PROMPT,
+    DEFAULT_RESULT_INFO_ITEMS,
     DEFAULT_RATE_LIMIT_SECONDS,
     DEFAULT_RESOLUTION,
     DEFAULT_TIMEOUT,
-)
-from .config_defaults import (
-    ALL_LLM_TOOLS,
-    ALL_RESULT_INFO_ITEMS,
-    DEFAULT_IMAGE_AUDIT_PROMPT,
-    DEFAULT_PROMPT_AUDIT_PROMPT,
-    DEFAULT_RESULT_INFO_ITEMS,
     LLM_TOOL_IMAGE_GENERATION,
     LLM_TOOL_PRESET_EDIT,
     LLM_TOOL_PRESET_QUERY,
@@ -38,7 +37,7 @@ from .config_defaults import (
     RESULT_INFO_TASK_ID,
     RESULT_INFO_USAGE,
 )
-from .config_migrator import ConfigMigrator
+from .config_validator import ConfigValidator
 from .logging_utils import log_prefix, safe_log_text
 from .types import AdapterConfig, AdapterType
 
@@ -129,6 +128,7 @@ class PromptAuditSettings:
     blocked_words: list[str] = field(default_factory=list)
     enable_ai_audit: bool = False
     ai_provider_id: str = ""
+    max_retry_attempts: int = DEFAULT_AUDIT_MAX_RETRY_ATTEMPTS
     ai_prompt: str = DEFAULT_PROMPT_AUDIT_PROMPT
 
 
@@ -138,6 +138,7 @@ class ImageAuditSettings:
 
     enable_ai_audit: bool = False
     ai_provider_id: str = ""
+    max_retry_attempts: int = DEFAULT_AUDIT_MAX_RETRY_ATTEMPTS
     ai_prompt: str = DEFAULT_IMAGE_AUDIT_PROMPT
 
 
@@ -168,18 +169,16 @@ class PluginConfig:
 class ConfigManager:
     """插件配置管理器。"""
 
-    MIGRATION_LOG_LIMIT = 20
-
     def __init__(self, config: AstrBotConfig):
         self._config = config
-        self._config_migrator = ConfigMigrator(getattr(config, "schema", None))
+        self._config_validator = ConfigValidator(getattr(config, "schema", None))
         self._plugin_config: PluginConfig = PluginConfig()
         self._all_provider_configs: list[AdapterConfig] = []  # 保存所有供应商配置
         self.load()
 
     def load(self) -> PluginConfig:
         """加载并解析插件配置。"""
-        self._migrate_legacy_config()
+        self._validate_config_values()
 
         gen_cfg = self._get_config_section("generation")
         user_limits_cfg = self._get_config_section("user_limits")
@@ -305,6 +304,12 @@ class ConfigManager:
             blocked_words=self._parse_string_list(cfg.get("blocked_words", [])),
             enable_ai_audit=self._get_bool(cfg, "enable_ai_audit", False),
             ai_provider_id=self._get_str(cfg, "ai_provider_id", ""),
+            max_retry_attempts=self._get_int(
+                cfg,
+                "max_retry_attempts",
+                DEFAULT_AUDIT_MAX_RETRY_ATTEMPTS,
+                min_value=1,
+            ),
             ai_prompt=self._get_str(cfg, "ai_prompt", PromptAuditSettings.ai_prompt),
         )
 
@@ -313,6 +318,12 @@ class ConfigManager:
         return ImageAuditSettings(
             enable_ai_audit=self._get_bool(cfg, "enable_ai_audit", False),
             ai_provider_id=self._get_str(cfg, "ai_provider_id", ""),
+            max_retry_attempts=self._get_int(
+                cfg,
+                "max_retry_attempts",
+                DEFAULT_AUDIT_MAX_RETRY_ATTEMPTS,
+                min_value=1,
+            ),
             ai_prompt=self._get_str(cfg, "ai_prompt", ImageAuditSettings.ai_prompt),
         )
 
@@ -320,25 +331,12 @@ class ConfigManager:
         """重新加载配置。"""
         return self.load()
 
-    def _migrate_legacy_config(self) -> None:
-        """Migrate legacy config and persist schema-normalized config."""
-        changed, messages = self._config_migrator.migrate(self._config)
+    def _validate_config_values(self) -> None:
+        """Validate config values and persist corrected values."""
+        changed = self._config_validator.validate(self._config)
         if not changed:
             return
-
-        logger.info(
-            f"{LOG} 已自动迁移并规范化配置: "
-            + self._format_migration_messages(messages)
-        )
         self._config.save_config()
-
-    def _format_migration_messages(self, messages: list[str]) -> str:
-        """Format migration messages without flooding logs."""
-        if len(messages) <= self.MIGRATION_LOG_LIMIT:
-            return "; ".join(messages)
-        visible_messages = messages[: self.MIGRATION_LOG_LIMIT]
-        hidden_count = len(messages) - self.MIGRATION_LOG_LIMIT
-        return "; ".join(visible_messages) + f"; ... and {hidden_count} more"
 
     def _get_config_section(self, name: str) -> dict[str, Any]:
         """Return a dictionary config section, falling back to an empty dict."""
@@ -469,12 +467,7 @@ class ConfigManager:
 
     def _parse_adapter_type(self, provider_item: dict[str, Any]) -> AdapterType | None:
         """Parse and validate the provider template key."""
-        raw_key = provider_item.get("__template_key") or ""
-        adapter_type_str = ConfigMigrator.normalize_template_key(raw_key)
-        if adapter_type_str != str(raw_key).strip():
-            logger.info(
-                f"{LOG} 兼容旧配置: api_providers.*.__template_key {raw_key!r} -> {adapter_type_str!r}"
-            )
+        adapter_type_str = str(provider_item.get("__template_key") or "").strip()
         if not adapter_type_str:
             return None
 

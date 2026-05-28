@@ -49,6 +49,7 @@ class SafetyAuditor:
             unified_msg_origin=unified_msg_origin,
             review_prompt=review_prompt,
             provider_id=settings.ai_provider_id,
+            max_retry_attempts=settings.max_retry_attempts,
             image_urls=None,
         )
 
@@ -74,6 +75,7 @@ class SafetyAuditor:
             unified_msg_origin=unified_msg_origin,
             review_prompt=review_prompt,
             provider_id=settings.ai_provider_id,
+            max_retry_attempts=settings.max_retry_attempts,
             image_urls=image_paths,
         )
 
@@ -123,6 +125,7 @@ class SafetyAuditor:
         unified_msg_origin: str,
         review_prompt: str,
         provider_id: str,
+        max_retry_attempts: int,
         image_urls: list[str] | None,
     ) -> tuple[bool, str]:
         provider = None
@@ -141,19 +144,40 @@ class SafetyAuditor:
             logger.warning(f"{LOG} {msg}")
             return False, msg
 
-        try:
-            response = await provider.text_chat(
-                prompt=review_prompt,
-                image_urls=image_urls or [],
-                persist=False,
-            )
-            completion_text = (response.completion_text or "").strip()
-            decision, reason = self._parse_audit_response(completion_text)
-            return decision, reason
-        except Exception as exc:
-            msg = f"安全审核异常：模型调用失败 - {str(exc)[:180]}"
-            logger.warning(f"{LOG} {msg}", exc_info=True)
-            return False, msg
+        attempts = max(1, max_retry_attempts)
+        last_reason = "安全审核异常：模型返回为空"
+        for attempt in range(1, attempts + 1):
+            try:
+                response = await provider.text_chat(
+                    prompt=review_prompt,
+                    image_urls=image_urls or [],
+                    persist=False,
+                )
+                completion_text = (response.completion_text or "").strip()
+                decision, reason = self._parse_audit_response(completion_text)
+                if self._is_retryable_audit_reason(reason) and attempt < attempts:
+                    last_reason = reason
+                    logger.warning(
+                        f"{LOG} 审核模型返回无法判定，准备重试: {attempt}/{attempts}，原因={safe_log_text(reason, 160)}"
+                    )
+                    continue
+                return decision, reason
+            except Exception as exc:
+                last_reason = f"安全审核异常：模型调用失败 - {str(exc)[:180]}"
+                if attempt < attempts:
+                    logger.warning(
+                        f"{LOG} 审核模型调用失败，准备重试: {attempt}/{attempts}，错误={safe_log_text(str(exc), 160)}",
+                        exc_info=True,
+                    )
+                    continue
+                logger.warning(f"{LOG} {last_reason}", exc_info=True)
+                return False, last_reason
+
+        return False, last_reason
+
+    def _is_retryable_audit_reason(self, reason: str) -> bool:
+        """Return whether an audit result should be retried."""
+        return reason.startswith("安全审核异常：")
 
     def _match_blocked_word(self, prompt: str, blocked_words: list[str]) -> str:
         content = prompt.lower()
