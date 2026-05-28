@@ -27,6 +27,7 @@ class GenerationTaskStatus(str, Enum):
     """Lifecycle states for image generation tasks."""
 
     QUEUED = "queued"
+    PREPARING = "preparing"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -36,12 +37,14 @@ class GenerationTaskStatus(str, Enum):
 
 ACTIVE_GENERATION_STATUSES = {
     GenerationTaskStatus.QUEUED,
+    GenerationTaskStatus.PREPARING,
     GenerationTaskStatus.RUNNING,
     GenerationTaskStatus.CANCELLING,
 }
 
 GENERATION_TASK_STATUS_LABELS = {
     GenerationTaskStatus.QUEUED: "排队中",
+    GenerationTaskStatus.PREPARING: "准备参考图",
     GenerationTaskStatus.RUNNING: "运行中",
     GenerationTaskStatus.SUCCEEDED: "已完成",
     GenerationTaskStatus.FAILED: "失败",
@@ -247,6 +250,33 @@ class TaskManager:
             f"{log_prefix('Task', task_id)} 生图任务开始运行: "
             f"排队={format_seconds(record.queued_seconds)}"
         )
+
+    def mark_generation_task_preparing(self, task_id: str) -> None:
+        """Mark a generation task as preparing reference images."""
+        record = self._generation_tasks.get(task_id)
+        if not record or record.status == GenerationTaskStatus.CANCELLING:
+            return
+        record.status = GenerationTaskStatus.PREPARING
+        record.started_at = record.started_at or datetime.now()
+        record.message = "正在准备参考图"
+        logger.debug(
+            f"{log_prefix('Task', task_id)} 生图任务开始准备参考图: "
+            f"排队={format_seconds(record.queued_seconds)}"
+        )
+
+    def update_generation_task_references(
+        self,
+        task_id: str,
+        *,
+        reference_image_count: int,
+    ) -> None:
+        """Update prepared reference image metadata for a generation task."""
+        record = self._generation_tasks.get(task_id)
+        if not record:
+            return
+        record.reference_image_count = max(0, reference_image_count)
+        if record.status == GenerationTaskStatus.PREPARING:
+            record.message = f"参考图准备完成，共 {record.reference_image_count} 张"
 
     def update_generation_task_retry_status(
         self,

@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 import json
 import time
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -250,6 +250,8 @@ class ImageGenerationPlugin(Star):
         source: str,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
+        prepare_images: Callable[[str], Awaitable[list[tuple[bytes, str]]]]
+        | None = None,
         unified_msg_origin: str,
         aspect_ratio: str,
         resolution: str,
@@ -272,6 +274,7 @@ class ImageGenerationPlugin(Star):
             self._generate_and_send_image_async(
                 prompt=prompt,
                 images_data=images_data or None,
+                prepare_images=prepare_images,
                 unified_msg_origin=unified_msg_origin,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
@@ -471,6 +474,29 @@ class ImageGenerationPlugin(Star):
             logger.debug(f"{task_log} 已忽略 {duplicate_count} 张重复参考图")
         return unique_images
 
+    async def _collect_command_reference_images(
+        self,
+        event: AstrMessageEvent,
+        persona_images: list[tuple[str, str]],
+        *,
+        task_id: str,
+    ) -> list[tuple[bytes, str]]:
+        """Collect command reference images after the task has been created."""
+        images_data: list[tuple[bytes, str]] = []
+        task_log = log_prefix("Task", task_id)
+        for persona_name, persona_image in persona_images:
+            if persona_image_data := await self.image_processor.download_image(
+                persona_image
+            ):
+                images_data.append(persona_image_data)
+            else:
+                logger.warning(
+                    f"{task_log} 人设参考图获取失败: {safe_log_text(persona_name)}"
+                )
+
+        images_data.extend(await self.image_processor.fetch_images_from_event(event))
+        return self._deduplicate_reference_images(images_data, task_id=task_id)
+
     def _format_start_template_values(
         self,
         *,
@@ -627,6 +653,8 @@ class ImageGenerationPlugin(Star):
         prompt: str,
         unified_msg_origin: str,
         images_data: list[tuple[bytes, str]] | None = None,
+        prepare_images: Callable[[str], Awaitable[list[tuple[bytes, str]]]]
+        | None = None,
         aspect_ratio: str = "1:1",
         resolution: str = "1K",
         image_count: int = 1,
@@ -655,6 +683,19 @@ class ImageGenerationPlugin(Star):
         # 检查并清理不支持的参数
         task_log = log_prefix("Task", task_id)
         image_count = self.normalize_image_count(image_count)
+        if prepare_images and capabilities & ImageCapability.IMAGE_TO_IMAGE:
+            self.task_manager.mark_generation_task_preparing(task_id)
+            try:
+                images_data = await prepare_images(task_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(
+                    f"{task_log} 参考图准备失败: {safe_log_text(exc, 200)}",
+                    exc_info=True,
+                )
+                images_data = []
+
         if not (capabilities & ImageCapability.IMAGE_TO_IMAGE) and images_data:
             logger.warning(
                 f"{task_log} 当前适配器不支持参考图，已忽略 {len(images_data)} 张图片"
@@ -690,6 +731,10 @@ class ImageGenerationPlugin(Star):
         if images_data:
             for data, mime in images_data:
                 images.append(ImageData(data=data, mime_type=mime))
+        self.task_manager.update_generation_task_references(
+            task_id,
+            reference_image_count=len(images),
+        )
 
         logger.debug(
             f"{task_log} 生图请求已规范化: 数量={image_count}张，参考图={len(images)}张，"
@@ -1146,39 +1191,24 @@ class ImageGenerationPlugin(Star):
             return
 
         task_id = hashlib.md5(f"{time.time()}{user_id}".encode()).hexdigest()[:8]
-        task_log = log_prefix("Task", task_id)
+        prepare_images = None
+        if self.generator.adapter.get_capabilities() & ImageCapability.IMAGE_TO_IMAGE:
 
-        # 获取参考图
-        images_data = None
-        if (
-            self.generator
-            and self.generator.adapter
-            and (
-                self.generator.adapter.get_capabilities()
-                & ImageCapability.IMAGE_TO_IMAGE
-            )
-        ):
-            images_data = []
-            for persona_name, persona_image in persona_images:
-                if persona_image_data := await self.image_processor.download_image(
-                    persona_image
-                ):
-                    images_data.append(persona_image_data)
-                else:
-                    logger.warning(
-                        f"{task_log} 人设参考图获取失败: {safe_log_text(persona_name)}"
-                    )
-            images_data.extend(
-                await self.image_processor.fetch_images_from_event(event)
-            )
-            images_data = self._deduplicate_reference_images(
-                images_data,
-                task_id=task_id,
-            )
+            async def prepare_images(
+                image_task_id: str,
+                *,
+                source_event: AstrMessageEvent = event,
+                source_persona_images: list[tuple[str, str]] = persona_images,
+            ) -> list[tuple[bytes, str]]:
+                return await self._collect_command_reference_images(
+                    source_event,
+                    source_persona_images,
+                    task_id=image_task_id,
+                )
 
         msg = self.format_start_task_message(
             prompt=prompt,
-            reference_image_count=len(images_data or []),
+            reference_image_count=0,
             image_count=image_count,
             preset=preset_or_persona,
             preset_label=preset_label,
@@ -1195,7 +1225,8 @@ class ImageGenerationPlugin(Star):
             task_id=task_id,
             source="指令",
             prompt=prompt,
-            images_data=images_data or None,
+            images_data=None,
+            prepare_images=prepare_images,
             unified_msg_origin=event.unified_msg_origin,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
