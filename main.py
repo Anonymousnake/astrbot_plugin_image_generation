@@ -42,6 +42,7 @@ from .core.llm_tool import (
     PresetQueryTool,
     adjust_tool_parameters,
 )
+from .core.reference_collector import collect_command_reference_images
 from .core.constants import UNSPECIFIED_OPTION
 from .core.logging_utils import (
     log_prefix,
@@ -447,55 +448,6 @@ class ImageGenerationPlugin(Star):
         if matched_personas:
             return "、".join(matched_personas), "人设"
         return None, "预设"
-
-    def _deduplicate_reference_images(
-        self,
-        images_data: list[tuple[bytes, str]],
-        *,
-        task_id: str | None = None,
-    ) -> list[tuple[bytes, str]]:
-        """Remove duplicate reference images by content hash."""
-        if len(images_data) < 2:
-            return images_data
-
-        unique_images: list[tuple[bytes, str]] = []
-        seen_hashes: set[str] = set()
-        duplicate_count = 0
-        for data, mime in images_data:
-            digest = hashlib.sha256(data).hexdigest()
-            if digest in seen_hashes:
-                duplicate_count += 1
-                continue
-            seen_hashes.add(digest)
-            unique_images.append((data, mime))
-
-        if duplicate_count:
-            task_log = log_prefix("Task", task_id) if task_id else LOG
-            logger.debug(f"{task_log} 已忽略 {duplicate_count} 张重复参考图")
-        return unique_images
-
-    async def _collect_command_reference_images(
-        self,
-        event: AstrMessageEvent,
-        persona_images: list[tuple[str, str]],
-        *,
-        task_id: str,
-    ) -> list[tuple[bytes, str]]:
-        """Collect command reference images after the task has been created."""
-        images_data: list[tuple[bytes, str]] = []
-        task_log = log_prefix("Task", task_id)
-        for persona_name, persona_image in persona_images:
-            if persona_image_data := await self.image_processor.download_image(
-                persona_image
-            ):
-                images_data.append(persona_image_data)
-            else:
-                logger.warning(
-                    f"{task_log} 人设参考图获取失败: {safe_log_text(persona_name)}"
-                )
-
-        images_data.extend(await self.image_processor.fetch_images_from_event(event))
-        return self._deduplicate_reference_images(images_data, task_id=task_id)
 
     def _format_start_template_values(
         self,
@@ -1230,7 +1182,8 @@ class ImageGenerationPlugin(Star):
                 source_event: AstrMessageEvent = event,
                 source_persona_images: list[tuple[str, str]] = persona_images,
             ) -> list[tuple[bytes, str]]:
-                return await self._collect_command_reference_images(
+                return await collect_command_reference_images(
+                    self.image_processor,
                     source_event,
                     source_persona_images,
                     task_id=image_task_id,

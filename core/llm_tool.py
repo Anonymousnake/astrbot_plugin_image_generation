@@ -7,7 +7,6 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from collections.abc import Iterable
 from typing import Any
 
 from pydantic import Field
@@ -23,8 +22,8 @@ from .logging_utils import (
     log_prefix,
     mask_sensitive,
     safe_log_text,
-    safe_log_url,
 )
+from .reference_collector import collect_tool_reference_images, normalize_string_items
 from .types import ImageCapability
 
 
@@ -47,23 +46,7 @@ def _extract_event(context: ContextWrapper[AstrAgentContext] | dict[str, Any]) -
 
 def _normalize_string_items(raw: Any) -> list[str]:
     """Normalize one or many string-like values from tool arguments."""
-    if raw is None:
-        return []
-    if isinstance(raw, str):
-        item = raw.strip()
-        return [item] if item else []
-    if isinstance(raw, dict):
-        for key in ("url", "path", "file", "name"):
-            if items := _normalize_string_items(raw.get(key)):
-                return items
-        return []
-    if isinstance(raw, Iterable):
-        items: list[str] = []
-        for value in raw:
-            items.extend(_normalize_string_items(value))
-        return items
-    item = str(raw).strip()
-    return [item] if item else []
+    return normalize_string_items(raw)
 
 
 def _normalize_name_items(raw: Any) -> list[str]:
@@ -298,115 +281,6 @@ def _parse_persona(
     return final_prompt, persona_images, matched_personas, None
 
 
-def _resolve_avatar_user_id(event: Any, ref: str) -> str | None:
-    """Resolve an avatar reference into a platform user id."""
-    normalized = ref.strip().lower()
-    if not normalized:
-        return None
-    if normalized == "self" and hasattr(event, "get_self_id"):
-        return str(event.get_self_id())
-    if normalized == "sender" and hasattr(event, "get_sender_id"):
-        return str(event.get_sender_id() or event.unified_msg_origin)
-
-    cleaned = normalized.removeprefix("qq:").removeprefix("@").strip()
-    if cleaned.isdigit():
-        return cleaned
-    return None
-
-
-async def _download_reference_images(
-    plugin: Any,
-    references: Any,
-    *,
-    reference_label: str,
-    task_id: str | None = None,
-) -> list[tuple[bytes, str]]:
-    """Download explicit reference images from URLs or local file paths."""
-    images_data: list[tuple[bytes, str]] = []
-    task_log = log_prefix("LLMTool", task_id) if task_id else LOG
-    for reference in _normalize_string_items(references):
-        if image_data := await plugin.image_processor.download_image(reference):
-            images_data.append(image_data)
-        else:
-            logger.warning(
-                f"{task_log} {reference_label}参考图获取失败: {safe_log_url(reference)}"
-            )
-    return images_data
-
-
-async def _collect_reference_images_from_personas(
-    plugin: Any,
-    persona_images: list[tuple[str, str]],
-    *,
-    task_id: str | None = None,
-) -> list[tuple[bytes, str]]:
-    """Download all configured persona reference images."""
-    images_data: list[tuple[bytes, str]] = []
-    task_log = log_prefix("LLMTool", task_id) if task_id else LOG
-    for persona_name, persona_image in persona_images:
-        if persona_image_data := await plugin.image_processor.download_image(
-            persona_image
-        ):
-            images_data.append(persona_image_data)
-        else:
-            logger.warning(
-                f"{task_log} 人设参考图获取失败: {safe_log_text(persona_name)}"
-            )
-    return images_data
-
-
-async def _collect_reference_images(
-    plugin: Any,
-    event: Any,
-    *,
-    capabilities: ImageCapability,
-    reference_images: Any = None,
-    avatar_references: Any = None,
-    persona_images: list[tuple[str, str]] | None = None,
-    task_id: str | None = None,
-) -> list[tuple[bytes, str]]:
-    """Collect explicit persona, URL/path, and avatar reference images."""
-    task_log = log_prefix("LLMTool", task_id) if task_id else LOG
-    if not (capabilities & ImageCapability.IMAGE_TO_IMAGE):
-        if reference_images or avatar_references or persona_images:
-            logger.warning(f"{task_log} 当前适配器不支持参考图，已忽略工具参考图参数")
-        return []
-
-    images_data: list[tuple[bytes, str]] = []
-    avatar_user_ids: set[str] = set()
-
-    if persona_images:
-        images_data.extend(
-            await _collect_reference_images_from_personas(
-                plugin,
-                persona_images,
-                task_id=task_id,
-            )
-        )
-
-    images_data.extend(
-        await _download_reference_images(
-            plugin,
-            reference_images,
-            reference_label="显式",
-            task_id=task_id,
-        )
-    )
-
-    for ref in _normalize_string_items(avatar_references):
-        user_id = _resolve_avatar_user_id(event, ref)
-        if not user_id or user_id in avatar_user_ids:
-            continue
-        avatar_user_ids.add(user_id)
-        if avatar_data := await plugin.image_processor.get_avatar(user_id):
-            images_data.append((avatar_data, "image/jpeg"))
-            logger.debug(
-                f"{task_log} 已添加 {mask_sensitive(user_id)} 的头像作为参考图"
-            )
-
-    return plugin._deduplicate_reference_images(images_data, task_id=task_id)
-
-
 async def _start_generation_task(
     plugin: Any,
     event: Any,
@@ -477,8 +351,8 @@ async def _start_generation_task(
 
     async def prepare_images(image_task_id: str) -> list[tuple[bytes, str]]:
         try:
-            return await _collect_reference_images(
-                plugin,
+            return await collect_tool_reference_images(
+                plugin.image_processor,
                 event,
                 capabilities=plugin.generator.adapter.get_capabilities(),
                 reference_images=reference_images,
