@@ -972,13 +972,7 @@ class ImageGenerationPlugin(Star):
                         errors.append(error_message)
                         logger.warning(f"{task_log} {error_message}")
                     else:
-                        selected_images = result.images[:1]
-                        if len(result.images) > 1:
-                            logger.debug(
-                                f"{task_log} 第 {current_index} 张请求返回图片超过 1 张，已忽略 {len(result.images) - 1} 张"
-                            )
-
-                        for img_bytes in selected_images:
+                        for img_bytes in result.images:
                             file_path = self.image_processor.save_generated_image(
                                 task_id, img_bytes
                             )
