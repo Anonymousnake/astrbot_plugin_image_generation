@@ -64,6 +64,8 @@ class ImageGenerator:
             aspect_ratio=request.aspect_ratio,
             resolution=request.resolution,
             task_id=request.task_id,
+            batch_index=request.batch_index,
+            batch_count=request.batch_count,
             retry_status_callback=request.retry_status_callback,
         )
         logger.debug(
@@ -71,6 +73,7 @@ class ImageGenerator:
             + format_cn_log_fields(
                 适配器=self.adapter.__class__.__name__,
                 模型=self.adapter.model,
+                进度=f"{request.batch_index}/{request.batch_count}",
                 参考图=f"{len(converted_images)}张",
                 宽高比=request.aspect_ratio,
                 分辨率=request.resolution,

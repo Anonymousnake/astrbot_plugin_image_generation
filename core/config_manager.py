@@ -13,6 +13,8 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from .constants import (
     DEFAULT_ASPECT_RATIO,
     DEFAULT_DAILY_LIMIT_COUNT,
+    DEFAULT_GENERATION_IMAGE_COUNT,
+    DEFAULT_MAX_GENERATION_IMAGE_COUNT,
     DEFAULT_MAX_CONCURRENT_TASKS,
     DEFAULT_MAX_IMAGE_SIZE_MB,
     DEFAULT_MAX_RETRY_ATTEMPTS,
@@ -102,11 +104,13 @@ class GenerationSettings:
 
     default_aspect_ratio: str = DEFAULT_ASPECT_RATIO
     default_resolution: str = DEFAULT_RESOLUTION
+    default_image_count: int = DEFAULT_GENERATION_IMAGE_COUNT
+    max_image_count: int = DEFAULT_MAX_GENERATION_IMAGE_COUNT
     max_concurrent_tasks: int = DEFAULT_MAX_CONCURRENT_TASKS
     result_info_items: set[str] = field(
         default_factory=lambda: set(DEFAULT_RESULT_INFO_ITEMS)
     )
-    start_task_message_template: str = "已开始生图任务{reference_images_block}{preset_block}{persona_block} [任务ID: {task_id}]"
+    start_task_message_template: str = "已开始生图任务{reference_images_block}{preset_block}{persona_block}{image_count_block} [任务ID: {task_id}]"
 
 
 @dataclass
@@ -249,6 +253,18 @@ class ConfigManager:
                 cfg,
                 "default_resolution",
                 DEFAULT_RESOLUTION,
+            ),
+            default_image_count=self._get_int(
+                cfg,
+                "default_image_count",
+                DEFAULT_GENERATION_IMAGE_COUNT,
+                min_value=1,
+            ),
+            max_image_count=self._get_int(
+                cfg,
+                "max_image_count",
+                DEFAULT_MAX_GENERATION_IMAGE_COUNT,
+                min_value=1,
             ),
             max_concurrent_tasks=self._get_int(
                 cfg,
@@ -742,8 +758,21 @@ class ConfigManager:
         return self._plugin_config.generation_settings.default_resolution
 
     @property
+    def default_image_count(self) -> int:
+        """默认单次生成图片数量。"""
+        return min(
+            self._plugin_config.generation_settings.default_image_count,
+            self.max_image_count,
+        )
+
+    @property
+    def max_image_count(self) -> int:
+        """单次最大生成图片数量。"""
+        return self._plugin_config.generation_settings.max_image_count
+
+    @property
     def max_concurrent_tasks(self) -> int:
-        """最大并发任务数。"""
+        """最大并发生图请求数。"""
         return self._plugin_config.generation_settings.max_concurrent_tasks
 
     @property

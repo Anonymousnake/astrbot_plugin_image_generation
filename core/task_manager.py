@@ -59,6 +59,7 @@ class GenerationTaskRecord:
     unified_msg_origin: str
     prompt_summary: str
     reference_image_count: int
+    requested_count: int
     aspect_ratio: str
     resolution: str
     preset: str | None = None
@@ -71,6 +72,7 @@ class GenerationTaskRecord:
     error: str = ""
     result_count: int = 0
     result_paths: list[str] = field(default_factory=list)
+    current_index: int = 0
     retry_attempt: int = 0
     max_retry_attempts: int = 0
     task: asyncio.Task | None = field(default=None, repr=False, compare=False)
@@ -119,6 +121,7 @@ def _task_creation_summary(record: GenerationTaskRecord) -> str:
     return (
         f"来源={safe_log_text(record.source)}，"
         f"用户={mask_sensitive(record.unified_msg_origin)}，"
+        f"数量={record.requested_count}张，"
         f"参考图={record.reference_image_count}张，"
         f"{record.preset_label}={format_optional(record.preset)}，"
         f"宽高比={safe_log_text(record.aspect_ratio)}，"
@@ -163,6 +166,7 @@ class TaskManager:
         unified_msg_origin: str,
         prompt: str,
         reference_image_count: int,
+        requested_count: int,
         aspect_ratio: str,
         resolution: str,
         preset: str | None = None,
@@ -178,6 +182,7 @@ class TaskManager:
             unified_msg_origin=unified_msg_origin,
             prompt_summary=safe_log_text(prompt, 80),
             reference_image_count=reference_image_count,
+            requested_count=max(1, requested_count),
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             preset=preset,
@@ -247,6 +252,7 @@ class TaskManager:
         self,
         task_id: str,
         *,
+        current_index: int,
         retry_attempt: int,
         max_retry_attempts: int,
     ) -> None:
@@ -254,8 +260,25 @@ class TaskManager:
         record = self._generation_tasks.get(task_id)
         if not record:
             return
+        record.current_index = max(1, current_index)
         record.retry_attempt = max(0, retry_attempt)
         record.max_retry_attempts = max(0, max_retry_attempts)
+
+    def update_generation_task_progress(
+        self,
+        task_id: str,
+        *,
+        current_index: int,
+        result_count: int,
+        message: str,
+    ) -> None:
+        """Update image count progress for one generation task."""
+        record = self._generation_tasks.get(task_id)
+        if not record:
+            return
+        record.current_index = max(1, current_index)
+        record.result_count = max(0, result_count)
+        record.message = message
 
     def mark_generation_task_succeeded(
         self,

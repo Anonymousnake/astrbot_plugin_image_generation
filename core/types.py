@@ -72,6 +72,8 @@ class GenerationRequest:
     aspect_ratio: str | None = None
     resolution: str | None = None
     task_id: str | None = None
+    batch_index: int = 1
+    batch_count: int = 1
     retry_status_callback: Callable[[int, int], None] | None = field(
         default=None,
         repr=False,

@@ -107,6 +107,7 @@ class BaseImageAdapter(abc.ABC):
         prefix = self._get_log_prefix(request.task_id)
         logger.debug(
             f"{prefix} 准备生图请求: 模型={safe_log_text(self.model)}，"
+            f"进度={request.batch_index}/{request.batch_count}，"
             f"参考图={len(request.images)}张，最大重试={self.max_retry_attempts}次"
         )
 

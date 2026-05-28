@@ -108,7 +108,7 @@ class ImageGenerationPlugin(Star):
 
         # 初始化生成器
         self.generator: ImageGenerator | None = None
-        self.semaphore: asyncio.Semaphore | None = None
+        self.request_semaphore: asyncio.Semaphore | None = None
 
     # ---------------------- 生命周期 ----------------------
 
@@ -116,12 +116,14 @@ class ImageGenerationPlugin(Star):
         """插件加载时调用"""
         if self.config_manager.adapter_config:
             self.generator = ImageGenerator(self.config_manager.adapter_config)
-            self.semaphore = asyncio.Semaphore(self.config_manager.max_concurrent_tasks)
+            self.request_semaphore = asyncio.Semaphore(
+                self.config_manager.max_concurrent_tasks
+            )
             logger.info(
                 f"{LOG} 初始化生图生成器: "
                 f"供应商={safe_log_text(self.config_manager.adapter_config.name)}，"
                 f"模型={safe_log_text(self.config_manager.adapter_config.model)}，"
-                f"最大并发={self.config_manager.max_concurrent_tasks}"
+                f"最大并发生图请求={self.config_manager.max_concurrent_tasks}"
             )
         else:
             logger.error(f"{LOG} 适配器配置加载失败，插件未初始化")
@@ -251,6 +253,7 @@ class ImageGenerationPlugin(Star):
         unified_msg_origin: str,
         aspect_ratio: str,
         resolution: str,
+        image_count: int,
         is_usage_limit_admin: bool,
         preset: str | None = None,
         preset_label: str = "预设",
@@ -264,6 +267,7 @@ class ImageGenerationPlugin(Star):
                 presets or [],
                 personas or [],
             )
+        image_count = self.normalize_image_count(image_count)
         record = self.task_manager.create_generation_task(
             self._generate_and_send_image_async(
                 prompt=prompt,
@@ -271,6 +275,7 @@ class ImageGenerationPlugin(Star):
                 unified_msg_origin=unified_msg_origin,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
+                image_count=image_count,
                 task_id=task_id,
                 is_usage_limit_admin=is_usage_limit_admin,
                 deliver_via_ai=source == "LLM工具",
@@ -280,6 +285,7 @@ class ImageGenerationPlugin(Star):
             unified_msg_origin=unified_msg_origin,
             prompt=prompt,
             reference_image_count=len(images_data or []),
+            requested_count=image_count,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             preset=preset,
@@ -299,6 +305,46 @@ class ImageGenerationPlugin(Star):
         except Exception as exc:
             logger.debug(f"{LOG} 获取管理员状态失败: {exc}")
             return False
+
+    def normalize_image_count(self, value: Any) -> int:
+        """Normalize requested image count using configured bounds."""
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            count = self.config_manager.default_image_count
+        return max(1, min(count, self.config_manager.max_image_count))
+
+    def _parse_command_image_count(self, prompt: str) -> tuple[int, str]:
+        """Parse optional image count from command prompt prefix."""
+        raw_prompt = prompt.strip()
+        default_count = self.config_manager.default_image_count
+        if not raw_prompt:
+            return default_count, ""
+
+        parts = raw_prompt.split(maxsplit=1)
+        first = parts[0].strip()
+        rest = parts[1].strip() if len(parts) > 1 else ""
+        count_keys = {"数量", "张数", "出图", "count", "image_count", "n"}
+
+        for sep in ("=", ":", "："):
+            if sep not in first:
+                continue
+            key, value = first.split(sep, 1)
+            if key.strip().lower() in count_keys:
+                return self.normalize_image_count(
+                    value.strip().removesuffix("张")
+                ), rest
+
+        if first.lower() in {"-n", "--count", "--数量", *count_keys} and rest:
+            value_parts = rest.split(maxsplit=1)
+            count_value = value_parts[0].strip().removesuffix("张")
+            remaining_prompt = value_parts[1].strip() if len(value_parts) > 1 else ""
+            return self.normalize_image_count(count_value), remaining_prompt
+
+        if first.endswith("张") and first[:-1].isdigit():
+            return self.normalize_image_count(first[:-1]), rest
+
+        return default_count, raw_prompt
 
     def _find_named_entry(self, entries: dict[str, Any], token: str) -> str | None:
         """Find an entry by exact or case-insensitive name."""
@@ -442,6 +488,7 @@ class ImageGenerationPlugin(Star):
         *,
         prompt: str,
         reference_image_count: int,
+        image_count: int,
         preset: str | None,
         preset_label: str = "预设",
         presets: list[str] | None = None,
@@ -464,6 +511,8 @@ class ImageGenerationPlugin(Star):
 
         values = _SafeFormatDict(
             reference_image_count=str(reference_image_count),
+            image_count=str(image_count),
+            count=str(image_count),
             prompt=prompt,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
@@ -471,6 +520,8 @@ class ImageGenerationPlugin(Star):
             model=model,
             mode="图生图" if reference_image_count else "文生图",
             preset_label=preset_label,
+            image_count_block=f"[数量: {image_count}张]" if image_count > 1 else "",
+            count_block=f"[数量: {image_count}张]" if image_count > 1 else "",
             reference_images_block=(
                 f"[{reference_image_count}张参考图]" if reference_image_count else ""
             ),
@@ -487,7 +538,7 @@ class ImageGenerationPlugin(Star):
             logger.warning(f"{LOG} 开始任务提示模板格式化失败: {exc}")
             return (
                 "已开始生图任务{reference_images_block}{preset_block}"
-                "{persona_block} [任务ID: {task_id}]"
+                "{persona_block}{image_count_block} [任务ID: {task_id}]"
             ).format_map(values)
 
     def format_task_detail(self, record: GenerationTaskRecord) -> str:
@@ -495,10 +546,14 @@ class ImageGenerationPlugin(Star):
         lines = [f"🧾 任务 {record.task_id}: {record.status_label}"]
         lines.append(f"来源: {record.source}")
         lines.append(f"提示词: {record.prompt_summary or '无'}")
+        lines.append(f"数量: {record.result_count}/{record.requested_count}张")
         lines.append(f"参考图: {record.reference_image_count}张")
         lines.append(f"宽高比: {record.aspect_ratio}，分辨率: {record.resolution}")
         if record.max_retry_attempts:
-            lines.append(f"重试: {record.retry_attempt}/{record.max_retry_attempts}")
+            progress = f"第 {record.current_index}/{record.requested_count} 张"
+            lines.append(
+                f"重试: {progress}，{record.retry_attempt}/{record.max_retry_attempts}"
+            )
         if record.preset:
             lines.append(f"{record.preset_label}: {record.preset}")
 
@@ -509,8 +564,6 @@ class ImageGenerationPlugin(Star):
         else:
             lines.append(f"排队: {record.queued_seconds:.2f}s")
 
-        if record.result_count:
-            lines.append(f"结果: {record.result_count}张")
         if record.error:
             lines.append(f"错误: {record.error}")
         elif record.message:
@@ -528,6 +581,7 @@ class ImageGenerationPlugin(Star):
                 f"{record.task_id}",
                 record.status_label,
                 record.source,
+                f"数量{record.result_count}/{record.requested_count}张",
                 f"参考图{record.reference_image_count}张",
             ]
             lines.append(f"{index}. " + " | ".join(parts))
@@ -568,6 +622,7 @@ class ImageGenerationPlugin(Star):
         images_data: list[tuple[bytes, str]] | None = None,
         aspect_ratio: str = "1:1",
         resolution: str = "1K",
+        image_count: int = 1,
         task_id: str | None = None,
         is_usage_limit_admin: bool = False,
         deliver_via_ai: bool = False,
@@ -592,6 +647,7 @@ class ImageGenerationPlugin(Star):
 
         # 检查并清理不支持的参数
         task_log = log_prefix("Task", task_id)
+        image_count = self.normalize_image_count(image_count)
         if not (capabilities & ImageCapability.IMAGE_TO_IMAGE) and images_data:
             logger.warning(
                 f"{task_log} 当前适配器不支持参考图，已忽略 {len(images_data)} 张图片"
@@ -629,36 +685,22 @@ class ImageGenerationPlugin(Star):
                 images.append(ImageData(data=data, mime_type=mime))
 
         logger.debug(
-            f"{task_log} 生图请求已规范化: 参考图={len(images)}张，"
+            f"{task_log} 生图请求已规范化: 数量={image_count}张，参考图={len(images)}张，"
             f"宽高比={safe_log_text(final_ar or UNSPECIFIED_OPTION)}，"
             f"分辨率={safe_log_text(final_res or UNSPECIFIED_OPTION)}"
         )
 
-        # 使用信号量控制并发
-        if self.semaphore is None:
-            await self._do_generate_and_send(
-                prompt,
-                unified_msg_origin,
-                images,
-                final_ar,
-                final_res,
-                task_id,
-                is_usage_limit_admin,
-                deliver_via_ai,
-            )
-            return
-
-        async with self.semaphore:
-            await self._do_generate_and_send(
-                prompt,
-                unified_msg_origin,
-                images,
-                final_ar,
-                final_res,
-                task_id,
-                is_usage_limit_admin,
-                deliver_via_ai,
-            )
+        await self._do_generate_and_send(
+            prompt,
+            unified_msg_origin,
+            images,
+            final_ar,
+            final_res,
+            image_count,
+            task_id,
+            is_usage_limit_admin,
+            deliver_via_ai,
+        )
 
     async def _do_generate_and_send(
         self,
@@ -667,6 +709,7 @@ class ImageGenerationPlugin(Star):
         images: list[ImageData],
         aspect_ratio: str | None,
         resolution: str | None,
+        image_count: int,
         task_id: str,
         is_usage_limit_admin: bool,
         deliver_via_ai: bool = False,
@@ -680,57 +723,100 @@ class ImageGenerationPlugin(Star):
             self.task_manager.mark_generation_task_failed(task_id, "生图生成器未初始化")
             return
         logger.debug(
-            f"{task_log} 调用生图适配器: 参考图={len(images)}张，"
+            f"{task_log} 调用生图适配器: 数量={image_count}张，参考图={len(images)}张，"
             f"宽高比={safe_log_text(aspect_ratio or UNSPECIFIED_OPTION)}，"
             f"分辨率={safe_log_text(resolution or UNSPECIFIED_OPTION)}"
         )
-        result = await self.generator.generate(
-            GenerationRequest(
-                prompt=prompt,
-                images=images,
-                aspect_ratio=aspect_ratio,
-                resolution=resolution,
-                task_id=task_id,
-                retry_status_callback=lambda retry_attempt,
-                max_retry_attempts: self.task_manager.update_generation_task_retry_status(
-                    task_id,
-                    retry_attempt=retry_attempt,
-                    max_retry_attempts=max_retry_attempts,
-                ),
+
+        generated_file_paths: list[str] = []
+        errors: list[str] = []
+        while len(generated_file_paths) < image_count:
+            current_index = len(generated_file_paths) + 1
+            self.task_manager.update_generation_task_progress(
+                task_id,
+                current_index=current_index,
+                result_count=len(generated_file_paths),
+                message=f"正在生成第 {current_index}/{image_count} 张",
             )
-        )
+
+            result = await self._generate_one_image_request(
+                GenerationRequest(
+                    prompt=prompt,
+                    images=images,
+                    aspect_ratio=aspect_ratio,
+                    resolution=resolution,
+                    task_id=task_id,
+                    batch_index=current_index,
+                    batch_count=image_count,
+                    retry_status_callback=lambda retry_attempt,
+                    max_retry_attempts,
+                    current_index=current_index: self.task_manager.update_generation_task_retry_status(
+                        task_id,
+                        current_index=current_index,
+                        retry_attempt=retry_attempt,
+                        max_retry_attempts=max_retry_attempts,
+                    ),
+                )
+            )
+
+            if result.error:
+                error_message = f"第 {current_index} 张生成失败: {result.error}"
+                errors.append(error_message)
+                logger.warning(f"{task_log} {safe_log_text(error_message, 200)}")
+                break
+
+            if not result.images:
+                error_message = f"第 {current_index} 张生成失败: 模型未返回图片"
+                errors.append(error_message)
+                logger.warning(f"{task_log} {error_message}")
+                break
+
+            remaining_count = image_count - len(generated_file_paths)
+            selected_images = result.images[:remaining_count]
+            if len(result.images) > remaining_count:
+                logger.debug(
+                    f"{task_log} 适配器返回图片超过请求数量，已忽略 {len(result.images) - remaining_count} 张"
+                )
+
+            for img_bytes in selected_images:
+                file_path = self.image_processor.save_generated_image(
+                    task_id, img_bytes
+                )
+                if file_path:
+                    generated_file_paths.append(file_path)
+                else:
+                    error_message = f"第 {current_index} 张生成失败: 未能保存图片"
+                    errors.append(error_message)
+                    logger.warning(f"{task_log} {error_message}")
+                    break
+
+            if errors:
+                break
+
+            self.task_manager.update_generation_task_progress(
+                task_id,
+                current_index=min(len(generated_file_paths) + 1, image_count),
+                result_count=len(generated_file_paths),
+                message=f"已生成 {len(generated_file_paths)}/{image_count} 张",
+            )
+
         end_time = time.time()
         duration = end_time - start_time
 
-        if result.error:
-            self.task_manager.mark_generation_task_failed(task_id, result.error)
+        if not generated_file_paths:
+            error = "; ".join(errors) or "模型未返回图片"
+            self.task_manager.mark_generation_task_failed(task_id, error)
             if deliver_via_ai:
                 return
             await self.context.send_message(
                 unified_msg_origin,
-                MessageChain().message(f"❌ 生成失败: {result.error}"),
+                MessageChain().message(f"❌ 生成失败: {error}"),
             )
             return
 
         logger.debug(
-            f"{task_log} 生成成功，耗时: {duration:.2f}s, 图片数量: {len(result.images) if result.images else 0}"
+            f"{task_log} 生成完成，耗时: {duration:.2f}s, 图片数量: {len(generated_file_paths)}/{image_count}"
         )
-
-        if not result.images:
-            self.task_manager.mark_generation_task_failed(task_id, "模型未返回图片")
-            return
-
-        generated_file_paths: list[str] = []
-        for img_bytes in result.images:
-            file_path = self.image_processor.save_generated_image(task_id, img_bytes)
-            if file_path:
-                generated_file_paths.append(file_path)
-
-        if not generated_file_paths:
-            self.task_manager.mark_generation_task_failed(
-                task_id, "未能保存任何生成图片"
-            )
-            return
 
         # 生图后图片审核
         image_allowed, image_reason = await self.safety_auditor.audit_generated_images(
@@ -751,17 +837,22 @@ class ImageGenerationPlugin(Star):
             )
             return
 
+        result_message = "图片已生成，等待 AI 处理" if deliver_via_ai else "图片已发送"
+        if errors:
+            result_message = f"{result_message}；部分失败: {'; '.join(errors)}"
+
         self.task_manager.mark_generation_task_succeeded(
             task_id,
             result_count=len(generated_file_paths),
             result_paths=generated_file_paths,
-            message="图片已生成，等待 AI 处理" if deliver_via_ai else "图片已发送",
+            message=result_message,
         )
 
-        # 记录使用次数
+        # 记录实际成功生成的图片数量
         self.usage_manager.record_usage(
             unified_msg_origin,
             is_admin=is_usage_limit_admin,
+            count=len(generated_file_paths),
         )
 
         if deliver_via_ai:
@@ -808,6 +899,18 @@ class ImageGenerationPlugin(Star):
             chain.message("\n" + "\n".join(info_parts))
 
         await self.context.send_message(unified_msg_origin, chain)
+
+    async def _generate_one_image_request(
+        self,
+        request: GenerationRequest,
+    ):
+        """Run one adapter generation request under the request-level semaphore."""
+        if not self.generator:
+            return None
+        if self.request_semaphore is None:
+            return await self.generator.generate(request)
+        async with self.request_semaphore:
+            return await self.generator.generate(request)
 
     # ---------------------- 指令处理 ----------------------
 
@@ -878,19 +981,8 @@ class ImageGenerationPlugin(Star):
         user_id = event.unified_msg_origin
         is_usage_limit_admin = self.is_usage_limit_admin(event)
 
-        # 检查频率限制和每日限制
-        check_result = self.usage_manager.check_rate_limit(
-            user_id,
-            is_admin=is_usage_limit_admin,
-        )
-        if isinstance(check_result, str):
-            if check_result:
-                yield event.plain_result(check_result)
-            return
-
-        masked_uid = mask_sensitive(user_id)
-
         user_input = (event.message_str or "").strip()
+        masked_uid = mask_sensitive(user_id)
         logger.debug(
             f"{LOG} 收到生图指令: 用户={masked_uid}，输入={safe_log_text(user_input)}"
         )
@@ -899,7 +991,20 @@ class ImageGenerationPlugin(Star):
         if not cmd_parts:
             return
 
-        prompt = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
+        raw_prompt = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
+        image_count, prompt = self._parse_command_image_count(raw_prompt)
+
+        # 检查频率限制和每日限制
+        check_result = self.usage_manager.check_rate_limit(
+            user_id,
+            is_admin=is_usage_limit_admin,
+            requested_count=image_count,
+        )
+        if isinstance(check_result, str):
+            if check_result:
+                yield event.plain_result(check_result)
+            return
+
         aspect_ratio = self.config_manager.default_aspect_ratio
         resolution = self.config_manager.default_resolution
         (
@@ -959,6 +1064,7 @@ class ImageGenerationPlugin(Star):
         msg = self.format_start_task_message(
             prompt=prompt,
             reference_image_count=len(images_data or []),
+            image_count=image_count,
             preset=preset_or_persona,
             preset_label=preset_label,
             presets=matched_presets,
@@ -978,6 +1084,7 @@ class ImageGenerationPlugin(Star):
             unified_msg_origin=event.unified_msg_origin,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
+            image_count=image_count,
             is_usage_limit_admin=is_usage_limit_admin,
             preset=preset_or_persona,
             preset_label=preset_label,

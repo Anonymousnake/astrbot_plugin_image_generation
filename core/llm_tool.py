@@ -447,15 +447,18 @@ async def _start_generation_task(
     preset_label: str = "预设",
     presets: list[str] | None = None,
     personas: list[str] | None = None,
+    image_count: int = 1,
 ) -> ToolExecResult:
     """Validate request, collect references, and schedule image generation."""
     if not plugin.generator or not plugin.generator.adapter:
         return "❌ 生图生成器未初始化"
 
+    image_count = plugin.normalize_image_count(image_count)
     is_usage_limit_admin = plugin.is_usage_limit_admin(event)
     check_result = plugin.usage_manager.check_rate_limit(
         event.unified_msg_origin,
         is_admin=is_usage_limit_admin,
+        requested_count=image_count,
     )
     if isinstance(check_result, str):
         if check_result:
@@ -509,6 +512,7 @@ async def _start_generation_task(
         unified_msg_origin=event.unified_msg_origin,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
+        image_count=image_count,
         is_usage_limit_admin=is_usage_limit_admin,
         preset=preset_or_persona,
         preset_label=preset_label,
@@ -526,6 +530,7 @@ async def _start_generation_task(
         personas=personas,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
+        image_count=image_count,
         task_id=task_id,
     )
 
@@ -566,6 +571,12 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
                     "description": "图片质量/分辨率。使用'不指定'时请求中不携带分辨率字段。",
                     "enum": RESOLUTION_OPTIONS,
                     "default": "不指定",
+                },
+                "image_count": {
+                    "type": "integer",
+                    "description": "本次任务要生成的图片数量。不填时使用插件默认出图数量；超过配置上限时会自动截断。",
+                    "minimum": 1,
+                    "default": 1,
                 },
                 "avatar_references": {
                     "type": "array",
@@ -641,6 +652,8 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
             preset_label=preset_label,
             presets=matched_presets,
             personas=matched_personas,
+            image_count=kwargs.get("image_count")
+            or plugin.config_manager.default_image_count,
         )
 
 

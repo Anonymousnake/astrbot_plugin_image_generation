@@ -47,7 +47,13 @@ DEFAULT_RESOLUTION = UNSPECIFIED_OPTION
 """默认分辨率。"""
 
 DEFAULT_MAX_CONCURRENT_TASKS = 3
-"""默认最大并发任务数。"""
+"""默认最大并发生图请求数。"""
+
+DEFAULT_GENERATION_IMAGE_COUNT = 1
+"""默认单次生成图片数量。"""
+
+DEFAULT_MAX_GENERATION_IMAGE_COUNT = 10
+"""默认单次最大生成图片数量。"""
 
 DEFAULT_MAX_IMAGE_SIZE_MB = 10
 """默认最大图片大小（MB）。"""

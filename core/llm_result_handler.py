@@ -90,6 +90,7 @@ class LLMResultHandler:
         personas: list[str] | None = None,
         aspect_ratio: str,
         resolution: str,
+        image_count: int,
         task_id: str,
     ) -> str:
         """Format the successful LLM tool result for the agent."""
@@ -114,6 +115,7 @@ class LLMResultHandler:
             "✅ 生图任务已提交，正在后台执行。",
             f"任务ID: {task_id}",
             "状态: 排队/运行中（尚未完成）",
+            f"数量: {image_count}张",
             f"模式: {'图生图' if reference_image_count else '文生图'}",
             f"参考图: {reference_image_count}张",
             f"宽高比: {aspect_ratio}，分辨率: {resolution}",
@@ -151,6 +153,8 @@ class LLMResultHandler:
             "status_label": record.status_label,
             "prompt": record.prompt_summary,
             "reference_image_count": record.reference_image_count,
+            "requested_count": record.requested_count,
+            "current_index": record.current_index,
             "aspect_ratio": record.aspect_ratio,
             "resolution": record.resolution,
             "preset_label": record.preset_label,

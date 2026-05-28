@@ -88,7 +88,13 @@ class UsageManager:
             return True
         return uid in self._settings.umo_whitelist
 
-    def check_rate_limit(self, user_id: str, *, is_admin: bool = False) -> bool | str:
+    def check_rate_limit(
+        self,
+        user_id: str,
+        *,
+        is_admin: bool = False,
+        requested_count: int = 1,
+    ) -> bool | str:
         """检查用户请求频率限制和每日限制。
 
         返回:
@@ -112,27 +118,41 @@ class UsageManager:
 
         # 2. 检查每日限制
         if self._settings.enable_daily_limit:
+            requested_count = max(1, requested_count)
             today = datetime.date.today().isoformat()
             if today not in self._usage_data:
                 self._usage_data[today] = {}
 
             count = self._usage_data[today].get(user_id, 0)
-            if count >= self._settings.daily_limit_count:
-                return f"❌ 您今日的生图额度已用完 ({self._settings.daily_limit_count}次)，请明天再试"
+            if count + requested_count > self._settings.daily_limit_count:
+                remaining = max(0, self._settings.daily_limit_count - count)
+                return (
+                    f"❌ 今日剩余生图额度不足，剩余 {remaining} 张，"
+                    f"本次请求 {requested_count} 张"
+                )
 
         return True
 
-    def record_usage(self, user_id: str, *, is_admin: bool = False) -> None:
+    def record_usage(
+        self,
+        user_id: str,
+        *,
+        is_admin: bool = False,
+        count: int = 1,
+    ) -> None:
         """记录用户使用次数。"""
         if not self._settings.enable_daily_limit:
             return
         if self.is_limit_exempt(user_id, is_admin=is_admin):
             return
 
+        count = max(1, count)
         today = datetime.date.today().isoformat()
         if today not in self._usage_data:
             self._usage_data[today] = {}
-        self._usage_data[today][user_id] = self._usage_data[today].get(user_id, 0) + 1
+        self._usage_data[today][user_id] = (
+            self._usage_data[today].get(user_id, 0) + count
+        )
         self._save_usage_data()
 
     def get_usage_count(self, user_id: str) -> int:

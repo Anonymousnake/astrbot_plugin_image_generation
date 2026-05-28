@@ -789,7 +789,7 @@
   },
   "generation": {
     "description": "生成设置",
-    "hint": "配置默认模型、并发、超时、分辨率和提示消息。",
+    "hint": "配置默认模型、并发、超时、分辨率、出图数量和提示消息。",
     "type": "object",
     "items": {
       "model": {
@@ -819,8 +819,8 @@
         "default": 3
       },
       "max_concurrent_tasks": {
-        "description": "最大并发任务数",
-        "hint": "同时执行的生图任务上限，用于控制资源占用。",
+        "description": "最大并发生图请求数",
+        "hint": "同时调用图像模型接口的请求上限，用于控制资源占用；多图任务中的每张图也会按请求级别受此限制。",
         "type": "int",
         "slider": {
           "min": 1,
@@ -828,6 +828,28 @@
           "step": 1
         },
         "default": 3
+      },
+      "default_image_count": {
+        "description": "默认出图数量",
+        "hint": "未在指令或 LLM 工具中指定数量时，单个生图任务默认生成的图片数量。",
+        "type": "int",
+        "slider": {
+          "min": 1,
+          "max": 10,
+          "step": 1
+        },
+        "default": 1
+      },
+      "max_image_count": {
+        "description": "单次最大出图数量",
+        "hint": "限制单个生图任务最多生成的图片数量；用户请求超过该值时会自动截断。",
+        "type": "int",
+        "slider": {
+          "min": 1,
+          "max": 30,
+          "step": 1
+        },
+        "default": 10
       },
       "default_aspect_ratio": {
         "description": "默认宽高比",
@@ -877,9 +899,9 @@
       },
       "start_task_message_template": {
         "description": "开始生图任务提示模板",
-        "hint": "任务开始时发送的提示。支持占位符：{reference_image_count}、{prompt}、{preset}、{presets}、{persona}、{personas}、{aspect_ratio}、{resolution}、{task_id}、{model}、{mode}、{reference_images_block}、{preset_block}、{persona_block}。留空则不发送。",
+        "hint": "任务开始时发送的提示。支持占位符：{reference_image_count}、{image_count}、{count}、{prompt}、{preset}、{presets}、{persona}、{personas}、{aspect_ratio}、{resolution}、{task_id}、{model}、{mode}、{reference_images_block}、{image_count_block}、{count_block}、{preset_block}、{persona_block}。留空则不发送。",
         "type": "text",
-        "default": "已开始生图任务{reference_images_block}{preset_block}{persona_block} [任务ID: {task_id}]"
+        "default": "已开始生图任务{reference_images_block}{preset_block}{persona_block}{image_count_block} [任务ID: {task_id}]"
       }
     }
   },
