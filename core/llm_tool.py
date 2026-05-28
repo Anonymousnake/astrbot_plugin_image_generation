@@ -455,6 +455,35 @@ async def _start_generation_task(
 
     image_count = plugin.normalize_image_count(image_count)
     is_usage_limit_admin = plugin.is_usage_limit_admin(event)
+    if (
+        not plugin.config_manager.adapter_config
+        or not plugin.config_manager.adapter_config.api_keys
+    ):
+        masked_uid = mask_sensitive(event.unified_msg_origin)
+        logger.warning(f"{LOG} 工具调用失败: 未配置 API Key (用户: {masked_uid})")
+        return "❌ 未配置 API Key，无法生成图片"
+
+    check_result = plugin.usage_manager.check_rate_limit(
+        event.unified_msg_origin,
+        is_admin=is_usage_limit_admin,
+        requested_count=image_count,
+        update_timestamp=False,
+    )
+    if isinstance(check_result, str):
+        if check_result:
+            masked_uid = mask_sensitive(event.unified_msg_origin)
+            logger.warning(
+                f"{LOG} 工具调用触发限制: {check_result} (用户: {masked_uid})"
+            )
+        return check_result
+
+    prompt_allowed, prompt_reason = await plugin.safety_auditor.audit_prompt(
+        prompt,
+        event.unified_msg_origin,
+    )
+    if not prompt_allowed:
+        return f"❌ 提示词审核未通过: {prompt_reason}"
+
     check_result = plugin.usage_manager.check_rate_limit(
         event.unified_msg_origin,
         is_admin=is_usage_limit_admin,
@@ -467,21 +496,6 @@ async def _start_generation_task(
                 f"{LOG} 工具调用触发限制: {check_result} (用户: {masked_uid})"
             )
         return check_result
-
-    if (
-        not plugin.config_manager.adapter_config
-        or not plugin.config_manager.adapter_config.api_keys
-    ):
-        masked_uid = mask_sensitive(event.unified_msg_origin)
-        logger.warning(f"{LOG} 工具调用失败: 未配置 API Key (用户: {masked_uid})")
-        return "❌ 未配置 API Key，无法生成图片"
-
-    prompt_allowed, prompt_reason = await plugin.safety_auditor.audit_prompt(
-        prompt,
-        event.unified_msg_origin,
-    )
-    if not prompt_allowed:
-        return f"❌ 提示词审核未通过: {prompt_reason}"
 
     task_id = hashlib.md5(
         f"{time.time()}{event.unified_msg_origin}".encode()

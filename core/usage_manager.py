@@ -94,12 +94,16 @@ class UsageManager:
         *,
         is_admin: bool = False,
         requested_count: int = 1,
+        update_timestamp: bool = True,
     ) -> bool | str:
         """检查用户请求频率限制和每日限制。
 
         返回:
             - True: 检查通过
             - str: 错误消息
+
+        Args:
+            update_timestamp: Whether to reserve the cooldown when checks pass.
         """
         # 1. 检查频率限制
         if self.is_limit_exempt(user_id, is_admin=is_admin):
@@ -114,7 +118,8 @@ class UsageManager:
             if now - last_ts < self._settings.rate_limit_seconds:
                 remaining = int(self._settings.rate_limit_seconds - (now - last_ts))
                 return f"❌ 请求过于频繁，请在 {remaining} 秒后再试"
-            self._user_request_timestamps[user_id] = now
+            if update_timestamp:
+                self._user_request_timestamps[user_id] = now
 
         # 2. 检查每日限制
         if self._settings.enable_daily_limit:

@@ -1053,17 +1053,6 @@ class ImageGenerationPlugin(Star):
         raw_prompt = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
         image_count, prompt = self._parse_command_image_count(raw_prompt)
 
-        # 检查频率限制和每日限制
-        check_result = self.usage_manager.check_rate_limit(
-            user_id,
-            is_admin=is_usage_limit_admin,
-            requested_count=image_count,
-        )
-        if isinstance(check_result, str):
-            if check_result:
-                yield event.plain_result(check_result)
-            return
-
         aspect_ratio = self.config_manager.default_aspect_ratio
         resolution = self.config_manager.default_resolution
         (
@@ -1083,6 +1072,25 @@ class ImageGenerationPlugin(Star):
             yield event.plain_result("❌ 请提供图片生成的提示词或预设名称！")
             return
 
+        if (
+            not self.config_manager.adapter_config
+            or not self.config_manager.adapter_config.api_keys
+        ):
+            logger.warning(f"{LOG} 生图指令失败: 未配置 API Key，用户={masked_uid}")
+            yield event.plain_result("❌ 未配置 API Key，无法生成图片")
+            return
+
+        check_result = self.usage_manager.check_rate_limit(
+            user_id,
+            is_admin=is_usage_limit_admin,
+            requested_count=image_count,
+            update_timestamp=False,
+        )
+        if isinstance(check_result, str):
+            if check_result:
+                yield event.plain_result(check_result)
+            return
+
         prompt_allowed, prompt_reason = await self.safety_auditor.audit_prompt(
             prompt, event.unified_msg_origin
         )
@@ -1091,6 +1099,16 @@ class ImageGenerationPlugin(Star):
                 f"{LOG} 提示词审核未通过: 用户={masked_uid}, 原因={safe_log_text(prompt_reason, 160)}"
             )
             yield event.plain_result(f"❌ 提示词审核未通过: {prompt_reason}")
+            return
+
+        check_result = self.usage_manager.check_rate_limit(
+            user_id,
+            is_admin=is_usage_limit_admin,
+            requested_count=image_count,
+        )
+        if isinstance(check_result, str):
+            if check_result:
+                yield event.plain_result(check_result)
             return
 
         task_id = hashlib.md5(f"{time.time()}{user_id}".encode()).hexdigest()[:8]
