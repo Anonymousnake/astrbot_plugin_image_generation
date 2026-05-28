@@ -709,11 +709,13 @@ class ImageGenerationPlugin(Star):
             f"分辨率={safe_log_text(resolution or UNSPECIFIED_OPTION)}"
         )
 
+        converted_images = await self.generator.convert_reference_images(images)
+
         generated_file_paths, errors = await self._generate_image_requests_concurrently(
             task_id=task_id,
             task_log=task_log,
             prompt=prompt,
-            images=images,
+            images=converted_images,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             image_count=image_count,
@@ -962,9 +964,15 @@ class ImageGenerationPlugin(Star):
         if not self.generator:
             return None
         if self.request_semaphore is None:
-            return await self.generator.generate(request)
+            return await self.generator.generate_preconverted(
+                request,
+                images=request.images,
+            )
         async with self.request_semaphore:
-            return await self.generator.generate(request)
+            return await self.generator.generate_preconverted(
+                request,
+                images=request.images,
+            )
 
     # ---------------------- 指令处理 ----------------------
 

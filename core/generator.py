@@ -53,14 +53,27 @@ class ImageGenerator:
         if not self.adapter:
             return GenerationResult(images=None, error="适配器未初始化")
 
-        # 先将参考图批量转换成兼容格式，再调用下游适配器
-        converted_images: list[ImageData] = []
-        if request.images:
-            converted_images = await convert_images_batch(request.images)
+        converted_images = await self.convert_reference_images(request.images)
+        return await self.generate_preconverted(request, images=converted_images)
 
-        patched_request = GenerationRequest(
+    async def convert_reference_images(
+        self, images: list[ImageData]
+    ) -> list[ImageData]:
+        """Convert reference images into adapter-compatible formats once."""
+        if not images:
+            return []
+        return await convert_images_batch(images)
+
+    def build_generation_request(
+        self,
+        request: GenerationRequest,
+        *,
+        images: list[ImageData],
+    ) -> GenerationRequest:
+        """Build a request with already converted reference images."""
+        return GenerationRequest(
             prompt=request.prompt,
-            images=converted_images,
+            images=images,
             aspect_ratio=request.aspect_ratio,
             resolution=request.resolution,
             task_id=request.task_id,
@@ -68,13 +81,25 @@ class ImageGenerator:
             batch_count=request.batch_count,
             retry_status_callback=request.retry_status_callback,
         )
+
+    async def generate_preconverted(
+        self,
+        request: GenerationRequest,
+        *,
+        images: list[ImageData],
+    ) -> GenerationResult:
+        """Generate an image request with preconverted reference images."""
+        if not self.adapter:
+            return GenerationResult(images=None, error="适配器未初始化")
+
+        patched_request = self.build_generation_request(request, images=images)
         logger.debug(
             f"{log_prefix('Generator', request.task_id)} 分发生图请求: "
             + format_cn_log_fields(
                 适配器=self.adapter.__class__.__name__,
                 模型=self.adapter.model,
                 进度=f"{request.batch_index}/{request.batch_count}",
-                参考图=f"{len(converted_images)}张",
+                参考图=f"{len(images)}张",
                 宽高比=request.aspect_ratio,
                 分辨率=request.resolution,
             )
