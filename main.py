@@ -42,6 +42,7 @@ from .core.llm_tool import (
     PresetQueryTool,
     adjust_tool_parameters,
 )
+from .core.public_api import ImageGenerationPublicAPI
 from .core.reference_collector import collect_command_reference_images
 from .core.constants import UNSPECIFIED_OPTION
 from .core.logging_utils import (
@@ -106,6 +107,9 @@ class ImageGenerationPlugin(Star):
 
         # 初始化安全审核器
         self.safety_auditor = SafetyAuditor(self.context, self.config_manager)
+
+        # 初始化供其他插件调用的公共 API
+        self.public_api = ImageGenerationPublicAPI(self)
 
         # 初始化生成器
         self.generator: ImageGenerator | None = None
@@ -261,6 +265,7 @@ class ImageGenerationPlugin(Star):
         presets: list[str] | None = None,
         personas: list[str] | None = None,
         source_event: AstrMessageEvent | None = None,
+        auto_send: bool = True,
     ) -> GenerationTaskRecord:
         """Create and track an image generation task in the unified task manager."""
         if preset is None:
@@ -280,6 +285,7 @@ class ImageGenerationPlugin(Star):
                 task_id=task_id,
                 is_usage_limit_admin=is_usage_limit_admin,
                 deliver_via_ai=source == "LLM工具",
+                auto_send=auto_send,
             ),
             task_id=task_id,
             source=source,
@@ -622,6 +628,7 @@ class ImageGenerationPlugin(Star):
         task_id: str | None = None,
         is_usage_limit_admin: bool = False,
         deliver_via_ai: bool = False,
+        auto_send: bool = True,
     ) -> None:
         """异步生成图片并发送。"""
         if not self.generator or not self.generator.adapter:
@@ -700,6 +707,7 @@ class ImageGenerationPlugin(Star):
             task_id,
             is_usage_limit_admin,
             deliver_via_ai,
+            auto_send,
         )
 
     async def _do_generate_and_send(
@@ -713,6 +721,7 @@ class ImageGenerationPlugin(Star):
         task_id: str,
         is_usage_limit_admin: bool,
         deliver_via_ai: bool = False,
+        auto_send: bool = True,
     ) -> None:
         """执行生成逻辑并发送结果。"""
         start_time = time.time()
@@ -746,7 +755,7 @@ class ImageGenerationPlugin(Star):
         if not generated_file_paths:
             error = "; ".join(errors) or "模型未返回图片"
             self.task_manager.mark_generation_task_failed(task_id, error)
-            if deliver_via_ai:
+            if deliver_via_ai or not auto_send or not unified_msg_origin:
                 return
             await self.context.send_message(
                 unified_msg_origin,
@@ -766,16 +775,17 @@ class ImageGenerationPlugin(Star):
         )
         if not image_allowed:
             # 生成已消耗模型调用成本，即使审核失败也计入实际生成额度。
-            self.usage_manager.record_usage(
-                unified_msg_origin,
-                is_admin=is_usage_limit_admin,
-                count=len(generated_file_paths),
-            )
+            if unified_msg_origin:
+                self.usage_manager.record_usage(
+                    unified_msg_origin,
+                    is_admin=is_usage_limit_admin,
+                    count=len(generated_file_paths),
+                )
             self.task_manager.mark_generation_task_failed(
                 task_id,
                 f"图片内容审核未通过: {image_reason}",
             )
-            if deliver_via_ai:
+            if deliver_via_ai or not auto_send or not unified_msg_origin:
                 return
             await self.context.send_message(
                 unified_msg_origin,
@@ -795,13 +805,14 @@ class ImageGenerationPlugin(Star):
         )
 
         # 记录实际成功生成的图片数量
-        self.usage_manager.record_usage(
-            unified_msg_origin,
-            is_admin=is_usage_limit_admin,
-            count=len(generated_file_paths),
-        )
+        if unified_msg_origin:
+            self.usage_manager.record_usage(
+                unified_msg_origin,
+                is_admin=is_usage_limit_admin,
+                count=len(generated_file_paths),
+            )
 
-        if deliver_via_ai:
+        if deliver_via_ai or not auto_send or not unified_msg_origin:
             return
 
         info_parts = []

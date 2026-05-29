@@ -198,3 +198,10 @@
 - 配置 `jimeng2api` 后，插件会在启动时和每天凌晨自动领取积分；仅直接连接即梦逆向时有效。
 - 即梦逆向图生图使用 `/v1/images/compositions`，使用中转可能会导致图生图失败。
 - 欢迎提交 Issue 或 PR 添加新的适配器。
+
+
+## 插件间公共 API
+
+本插件提供 `plugin.public_api` 供其他 AstrBot 插件复用生图能力
+
+详细接口参数、返回对象和调用示例见：[插件间公共 API 文档](docs/public-api.md)。
