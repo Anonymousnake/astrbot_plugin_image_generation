@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 import json
 import time
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -251,8 +251,6 @@ class ImageGenerationPlugin(Star):
         source: str,
         prompt: str,
         images_data: list[tuple[bytes, str]] | None,
-        prepare_images: Callable[[str], Awaitable[list[tuple[bytes, str]]]]
-        | None = None,
         unified_msg_origin: str,
         aspect_ratio: str,
         resolution: str,
@@ -275,7 +273,6 @@ class ImageGenerationPlugin(Star):
             self._generate_and_send_image_async(
                 prompt=prompt,
                 images_data=images_data or None,
-                prepare_images=prepare_images,
                 unified_msg_origin=unified_msg_origin,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
@@ -619,8 +616,6 @@ class ImageGenerationPlugin(Star):
         prompt: str,
         unified_msg_origin: str,
         images_data: list[tuple[bytes, str]] | None = None,
-        prepare_images: Callable[[str], Awaitable[list[tuple[bytes, str]]]]
-        | None = None,
         aspect_ratio: str = "1:1",
         resolution: str = "1K",
         image_count: int = 1,
@@ -649,19 +644,6 @@ class ImageGenerationPlugin(Star):
         # 检查并清理不支持的参数
         task_log = log_prefix("Task", task_id)
         image_count = self.normalize_image_count(image_count)
-        if prepare_images and capabilities & ImageCapability.IMAGE_TO_IMAGE:
-            self.task_manager.mark_generation_task_preparing(task_id)
-            try:
-                images_data = await prepare_images(task_id)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.error(
-                    f"{task_log} 参考图准备失败: {safe_log_text(exc, 200)}",
-                    exc_info=True,
-                )
-                images_data = []
-
         if not (capabilities & ImageCapability.IMAGE_TO_IMAGE) and images_data:
             logger.warning(
                 f"{task_log} 当前适配器不支持参考图，已忽略 {len(images_data)} 张图片"
@@ -934,13 +916,13 @@ class ImageGenerationPlugin(Star):
                         task_id=task_id,
                         batch_index=current_index,
                         batch_count=image_count,
-                        retry_status_callback=lambda retry_attempt,
-                        max_retry_attempts,
-                        current_index=current_index: self.task_manager.update_generation_task_retry_status(
-                            task_id,
-                            current_index=current_index,
-                            retry_attempt=retry_attempt,
-                            max_retry_attempts=max_retry_attempts,
+                        retry_status_callback=lambda retry_attempt, max_retry_attempts, current_index=current_index: (
+                            self.task_manager.update_generation_task_retry_status(
+                                task_id,
+                                current_index=current_index,
+                                retry_attempt=retry_attempt,
+                                max_retry_attempts=max_retry_attempts,
+                            )
                         ),
                     )
                 ),
@@ -1215,25 +1197,29 @@ class ImageGenerationPlugin(Star):
             return
 
         task_id = hashlib.md5(f"{time.time()}{user_id}".encode()).hexdigest()[:8]
-        prepare_images = None
+        images_data: list[tuple[bytes, str]] | None = None
         if self.generator.adapter.get_capabilities() & ImageCapability.IMAGE_TO_IMAGE:
-
-            async def prepare_images(
-                image_task_id: str,
-                *,
-                source_event: AstrMessageEvent = event,
-                source_persona_images: list[tuple[str, str]] = persona_images,
-            ) -> list[tuple[bytes, str]]:
-                return await collect_command_reference_images(
+            try:
+                images_data = await collect_command_reference_images(
                     self.image_processor,
-                    source_event,
-                    source_persona_images,
-                    task_id=image_task_id,
+                    event,
+                    persona_images,
+                    task_id=task_id,
                 )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(
+                    f"{log_prefix('Task', task_id)} 参考图准备失败: {safe_log_text(exc, 200)}",
+                    exc_info=True,
+                )
+                images_data = []
+
+        reference_image_count = len(images_data or [])
 
         msg = self.format_start_task_message(
             prompt=prompt,
-            reference_image_count=0,
+            reference_image_count=reference_image_count,
             image_count=image_count,
             preset=preset_or_persona,
             preset_label=preset_label,
@@ -1250,8 +1236,7 @@ class ImageGenerationPlugin(Star):
             task_id=task_id,
             source="指令",
             prompt=prompt,
-            images_data=None,
-            prepare_images=prepare_images,
+            images_data=images_data,
             unified_msg_origin=event.unified_msg_origin,
             aspect_ratio=aspect_ratio,
             resolution=resolution,

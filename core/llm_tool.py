@@ -348,31 +348,31 @@ async def _start_generation_task(
     task_id = hashlib.md5(
         f"{time.time()}{event.unified_msg_origin}".encode()
     ).hexdigest()[:8]
+    capabilities = plugin.generator.adapter.get_capabilities()
+    try:
+        images_data = await collect_tool_reference_images(
+            plugin.image_processor,
+            event,
+            capabilities=capabilities,
+            reference_images=reference_images,
+            avatar_references=avatar_references,
+            persona_images=persona_images,
+            task_id=task_id,
+        )
+    except Exception as exc:
+        logger.error(
+            f"{log_prefix('LLMTool', task_id)} 处理参考图失败: {exc}",
+            exc_info=True,
+        )
+        images_data = []
 
-    async def prepare_images(image_task_id: str) -> list[tuple[bytes, str]]:
-        try:
-            return await collect_tool_reference_images(
-                plugin.image_processor,
-                event,
-                capabilities=plugin.generator.adapter.get_capabilities(),
-                reference_images=reference_images,
-                avatar_references=avatar_references,
-                persona_images=persona_images,
-                task_id=image_task_id,
-            )
-        except Exception as exc:
-            logger.error(
-                f"{log_prefix('LLMTool', image_task_id)} 处理参考图失败: {exc}",
-                exc_info=True,
-            )
-            return []
+    reference_image_count = len(images_data)
 
     plugin.create_generation_task(
         task_id=task_id,
         source="LLM工具",
         prompt=prompt,
-        images_data=None,
-        prepare_images=prepare_images,
+        images_data=images_data,
         unified_msg_origin=event.unified_msg_origin,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
@@ -387,7 +387,7 @@ async def _start_generation_task(
 
     return plugin.llm_result_handler.format_tool_start_result(
         prompt=prompt,
-        reference_image_count=0,
+        reference_image_count=reference_image_count,
         preset=preset_or_persona,
         preset_label=preset_label,
         presets=presets,
