@@ -4,6 +4,7 @@ from astrbot.api import logger
 
 from ..adapter import (
     AgnesAIAdapter,
+    CustomHTTPAdapter,
     GeminiAdapter,
     GiteeAIAdapter,
     GrokAdapter,
@@ -43,6 +44,7 @@ class ImageGenerator:
             AdapterType.AGNES_AI: AgnesAIAdapter,
             AdapterType.JIMENG2API: Jimeng2APIAdapter,
             AdapterType.GROK: GrokAdapter,
+            AdapterType.CUSTOM_HTTP: CustomHTTPAdapter,
         }
 
         adapter_cls = adapter_map.get(config.type)

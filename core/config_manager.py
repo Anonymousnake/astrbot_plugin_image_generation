@@ -475,7 +475,10 @@ class ConfigManager:
         return AdapterConfig(
             type=adapter_type,
             name=str(provider_item.get("name", "")).strip(),
-            base_url=self._clean_base_url(base_url),
+            base_url=self._clean_base_url(
+                base_url,
+                preserve_version_path=adapter_type == AdapterType.CUSTOM_HTTP,
+            ),
             api_keys=self._parse_string_list(provider_item.get("api_keys", [])),
             available_models=self._parse_string_list(
                 provider_item.get("available_models", [])
@@ -698,11 +701,13 @@ class ConfigManager:
 
         return {key: key in selected for key in supported_keys}
 
-    def _clean_base_url(self, url: str) -> str:
+    def _clean_base_url(self, url: str, *, preserve_version_path: bool = False) -> str:
         """清理 Base URL，移除末尾的 /v1*"""
         if not url:
             return ""
         url = url.rstrip("/")
+        if preserve_version_path:
+            return url
         if "/v1" in url:
             url = url.split("/v1", 1)[0]
         return url.rstrip("/")

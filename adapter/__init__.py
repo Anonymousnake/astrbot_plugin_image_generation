@@ -4,6 +4,7 @@ Adapter module for image generation plugin
 """
 
 from .agnes_ai_adapter import AgnesAIAdapter
+from .custom_http_adapter import CustomHTTPAdapter
 from .gemini_adapter import GeminiAdapter
 from .gitee_ai_adapter import GiteeAIAdapter
 from .grok_adapter import GrokAdapter
@@ -15,6 +16,7 @@ from .volcengine_ark_adapter import VolcengineArkAdapter
 
 __all__ = [
     "AgnesAIAdapter",
+    "CustomHTTPAdapter",
     "GeminiAdapter",
     "OpenAIChatAdapter",
     "GiteeAIAdapter",

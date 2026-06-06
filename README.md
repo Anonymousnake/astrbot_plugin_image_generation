@@ -11,6 +11,7 @@
 ## 功能
 
 - 多供应商配置：一个插件中配置多个生图服务，每个供应商可独立设置 API Key、Base URL、代理和模型列表。
+- [自定义 HTTP 接口](docs/custom-http.md)：可通过 JSON 模板自定义请求头、请求体、查询参数和响应图片提取路径。
 - 模型动态切换：通过 `/生图模型` 查看和切换模型，模型格式为 `供应商名称/模型名称`。
 - 文生图与图生图：自动识别消息图片、引用消息图片和 @ 用户头像作为参考图。
 - LLM 工具调用：可作为 LLM 工具在对话中自动触发生图。
@@ -45,6 +46,8 @@
 | `grok`                | xAI Images API `/v1/images/generations`、`/v1/images/edits`    |   ✅    |   ✅    |    ✅     | Grok / xAI 图像生成接口。                                                                       |
 | `siliconflow_adapter` | SiliconFlow Images API `/v1/images/generations`                |   ✅    |   ✅    |    ✅     | 支持 Kolors、Qwen-Image、Qwen-Image-Edit、Z-Image；多参考图映射到 `image`、`image2`、`image3`。 |
 | `agnes_ai`            | Agnes AI Images API `/v1/images/generations`                   |   ✅    |   ✅    |    ✅     | 支持 `agnes-image-2.0-flash` 和 `agnes-image-2.1-flash`；宽高比会在插件内映射为官方 `size` 字段，不会发送 `aspect_ratio` 字段；2.0 图生图会自动附加 `tags: ["img2img"]`，参考图通过 `extra_body.image` 发送。 |
+| `custom_http`         | 用户自定义 HTTP JSON 接口                                      |   ✅    |   ✅    |    ✅     | 高级接口模板，详见 [自定义 HTTP 接口配置](docs/custom-http.md)。                               |
+
 
 ## 配置
 
