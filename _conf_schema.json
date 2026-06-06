@@ -101,21 +101,20 @@
           }
         }
       },
-      "gemini_openai": {
-        "name": "Gemini OpenAI 兼容接口",
-        "hint": "调用兼容 OpenAI 格式的 Gemini 图像生成接口。",
+      "openai_chat": {
+        "name": "OpenAI Chat 兼容接口",
+        "hint": "调用通用 OpenAI Chat Completions 兼容图像生成接口，适用于能在 /v1/chat/completions 返回图片的模型或中转服务。",
         "display_item": "name",
         "hide_hint_in_list": true,
         "items": {
           "name": {
             "description": "供应商名称",
             "hint": "用于显示和模型选择；格式为“供应商名称/模型名称”。",
-            "type": "string",
-            "default": ""
+            "type": "string"
           },
           "base_url": {
             "description": "API Base URL",
-            "hint": "可选。留空使用适配器默认地址，或填写兼容的 API Base URL。",
+            "hint": "填写API地址",
             "type": "string",
             "default": ""
           },
@@ -133,9 +132,10 @@
           },
           "available_models": {
             "description": "可用模型列表",
-            "hint": "用于 /生图模型 命令切换；请按账号实际可用模型维护。",
+            "hint": "用于 /生图模型 命令切换。",
             "type": "list",
             "default": [
+              "gpt-4o-image",
               "gemini-3-pro-image",
               "gemini-2.5-flash-image"
             ]
@@ -176,6 +176,27 @@
               "step": 1
             },
             "default": 0
+          },
+          "prompt_prefix": {
+            "description": "提示词前缀",
+            "hint": "发送到 Chat Completions 的文本前缀；留空则直接发送用户提示词。",
+            "type": "string",
+            "default": "Generate an image: "
+          },
+          "modalities": {
+            "description": "输出模态",
+            "hint": "发送到请求体的 modalities 字段；部分兼容接口需要 image,text，留空则不发送。",
+            "type": "list",
+            "default": [
+              "image",
+              "text"
+            ]
+          },
+          "extra_body_json": {
+            "description": "额外请求体 JSON",
+            "hint": "可选。填写 JSON 对象，会合并到 Chat Completions 请求体顶层。",
+            "type": "string",
+            "default": ""
           }
         }
       },
@@ -717,7 +738,7 @@
         }
       },
       "jimeng2api": {
-        "name": "即梦接口",
+        "name": "即梦逆向接口",
         "hint": "调用 iptag/jimeng-api 项目的图像生成接口。",
         "display_item": "name",
         "hide_hint_in_list": true,

@@ -81,6 +81,10 @@ PROVIDER_COMMON_FIELDS = frozenset(
 )
 
 ADAPTER_EXTRA_DEFAULTS: dict[AdapterType, dict[str, Any]] = {
+    AdapterType.OPENAI_CHAT: {
+        "prompt_prefix": "Generate an image: ",
+        "modalities": ["image", "text"],
+    },
     AdapterType.OPENAI: {"model_family": "auto"},
 }
 LOG = log_prefix("Config")

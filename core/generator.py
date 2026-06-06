@@ -5,10 +5,10 @@ from astrbot.api import logger
 from ..adapter import (
     AgnesAIAdapter,
     GeminiAdapter,
-    GeminiOpenAIAdapter,
     GiteeAIAdapter,
     GrokAdapter,
     Jimeng2APIAdapter,
+    OpenAIChatAdapter,
     OpenAIAdapter,
     SiliconFlowAdapter,
     VolcengineArkAdapter,
@@ -35,7 +35,7 @@ class ImageGenerator:
         """根据配置创建对应的适配器。"""
         adapter_map: dict[AdapterType, type] = {
             AdapterType.GEMINI: GeminiAdapter,
-            AdapterType.GEMINI_OPENAI: GeminiOpenAIAdapter,
+            AdapterType.OPENAI_CHAT: OpenAIChatAdapter,
             AdapterType.OPENAI: OpenAIAdapter,
             AdapterType.SILICONFLOW: SiliconFlowAdapter,
             AdapterType.VOLCENGINE_ARK: VolcengineArkAdapter,
