@@ -978,7 +978,7 @@
             "description": "请求来源标记",
             "hint": "发送给 LukaLeng 的 source 字段。",
             "type": "string",
-            "default": "astrbot"
+            "default": "image-page"
           },
           "response_format": {
             "description": "响应格式",

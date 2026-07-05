@@ -194,7 +194,7 @@ class LukaAdapter(BaseImageAdapter):
         return self.model or self.DEFAULT_MODEL
 
     def _source(self) -> str:
-        return str(self.config.extra.get("source") or "astrbot").strip() or "astrbot"
+        return str(self.config.extra.get("source") or "image-page").strip() or "image-page"
 
     def _response_format(self) -> str:
         value = str(self.config.extra.get("response_format") or "").strip()

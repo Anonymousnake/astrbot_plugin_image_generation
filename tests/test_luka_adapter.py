@@ -109,6 +109,7 @@ class LukaAdapterTests(unittest.TestCase):
         self.assertIn("response_format", fields)
         self.assertIn("image", fields)
         self.assertTrue(form.is_multipart)
+        self.assertEqual(adapter._source(), "image-page")
 
 
 if __name__ == "__main__":
