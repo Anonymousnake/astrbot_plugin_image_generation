@@ -44,6 +44,7 @@
 | `gitee_ai`            | Gitee AI `/v1/images/generations`、`/v1/images/edits`          |   ✅    |   ✅    |    ✅     | Gitee AI 通用图像接口                                                                           |
 | `jimeng2api`          | jimeng-api `/v1/images/generations`、`/v1/images/compositions` |   ✅    |   ✅    |    ✅     | 适用于 [iptag/jimeng-api](https://github.com/iptag/jimeng-api)。                                |
 | `grok`                | xAI Images API `/v1/images/generations`、`/v1/images/edits`    |   ✅    |   ✅    |    ✅     | Grok / xAI 图像生成接口。                                                                       |
+| `luka`                | LukaLeng `/api/v1/images/generations`、`/api/v1/images/edits`  |   ✅    |   ✅    |    ✅     | LukaLeng 生图站接口，图生图通过 multipart 上传参考图，并附带浏览器式请求头。                   |
 | `siliconflow_adapter` | SiliconFlow Images API `/v1/images/generations`                |   ✅    |   ✅    |    ✅     | 支持 Kolors、Qwen-Image、Qwen-Image-Edit、Z-Image；多参考图映射到 `image`、`image2`、`image3`。 |
 | `agnes_ai`            | Agnes AI Images API `/v1/images/generations`                   |   ✅    |   ✅    |    ✅     | 支持 `agnes-image-2.0-flash` 和 `agnes-image-2.1-flash`；参考图通过 `extra_body.image` 数组发送。 |
 | `custom_http`         | 用户自定义 HTTP JSON 接口                                      |   ✅    |   ✅    |    ✅     | 高级接口模板，详见 [自定义 HTTP 接口配置](docs/custom-http.md)。                                |

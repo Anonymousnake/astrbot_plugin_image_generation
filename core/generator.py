@@ -9,6 +9,7 @@ from ..adapter import (
     GiteeAIAdapter,
     GrokAdapter,
     Jimeng2APIAdapter,
+    LukaAdapter,
     OpenAIChatAdapter,
     OpenAIAdapter,
     SiliconFlowAdapter,
@@ -44,6 +45,7 @@ class ImageGenerator:
             AdapterType.AGNES_AI: AgnesAIAdapter,
             AdapterType.JIMENG2API: Jimeng2APIAdapter,
             AdapterType.GROK: GrokAdapter,
+            AdapterType.LUKA: LukaAdapter,
             AdapterType.CUSTOM_HTTP: CustomHTTPAdapter,
         }
 

@@ -484,7 +484,8 @@ class ConfigManager:
             name=str(provider_item.get("name", "")).strip(),
             base_url=self._clean_base_url(
                 base_url,
-                preserve_version_path=adapter_type == AdapterType.CUSTOM_HTTP,
+                preserve_version_path=adapter_type
+                in {AdapterType.CUSTOM_HTTP, AdapterType.LUKA},
             ),
             api_keys=self._parse_string_list(provider_item.get("api_keys", [])),
             available_models=self._parse_string_list(

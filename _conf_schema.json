@@ -898,6 +898,147 @@
           }
         }
       },
+      "luka": {
+        "name": "LukaLeng 生图站",
+        "hint": "调用 LukaLeng /api/v1/images/generations 与 /api/v1/images/edits，支持文生图和 multipart 图生图。",
+        "display_item": "name",
+        "hide_hint_in_list": true,
+        "items": {
+          "name": {
+            "description": "供应商名称",
+            "hint": "用于显示和模型选择；格式为“供应商名称/模型名称”。",
+            "type": "string",
+            "default": "LukaLeng"
+          },
+          "base_url": {
+            "description": "API Base URL",
+            "hint": "默认 https://art.luka77.cc/api/v1，也可填写包含 /api 或 /api/v1 的地址。",
+            "type": "string",
+            "default": "https://art.luka77.cc/api/v1"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "hint": "可选，示例：http://127.0.0.1:7890。",
+            "type": "string",
+            "default": ""
+          },
+          "api_keys": {
+            "description": "登录 Token",
+            "hint": "填写 LukaLeng 登录 token；请求时会按 Bearer Token 发送。",
+            "type": "list",
+            "default": []
+          },
+          "available_models": {
+            "description": "可用模型列表",
+            "hint": "用于 /生图模型 命令切换；LukaLeng 当前默认 gpt-image-2。",
+            "type": "list",
+            "default": [
+              "gpt-image-2"
+            ]
+          },
+          "capability_options": {
+            "description": "模型能力",
+            "hint": "LukaLeng 支持文生图、图生图和宽高比；图生图会使用 /images/edits multipart 上传。",
+            "type": "list",
+            "options": [
+              "文生图",
+              "图生图",
+              "宽高比",
+              "分辨率"
+            ],
+            "default": [
+              "文生图",
+              "图生图",
+              "宽高比"
+            ]
+          },
+          "timeout": {
+            "description": "超时时间覆盖（秒）",
+            "hint": "填 0 表示使用全局超时时间。",
+            "type": "int",
+            "slider": {
+              "min": 0,
+              "max": 600,
+              "step": 10
+            },
+            "default": 120
+          },
+          "max_retry_attempts": {
+            "description": "重试次数覆盖",
+            "hint": "填 0 表示使用全局重试次数。",
+            "type": "int",
+            "slider": {
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            "default": 1
+          },
+          "source": {
+            "description": "请求来源标记",
+            "hint": "发送给 LukaLeng 的 source 字段。",
+            "type": "string",
+            "default": "astrbot"
+          },
+          "response_format": {
+            "description": "响应格式",
+            "hint": "url 会返回图片链接并由插件下载；b64_json 会直接解析 base64。",
+            "type": "string",
+            "options": [
+              "url",
+              "b64_json"
+            ],
+            "default": "url"
+          },
+          "quality": {
+            "description": "质量参数",
+            "hint": "可选；留空时不发送。例如 auto。",
+            "type": "string",
+            "default": ""
+          },
+          "size": {
+            "description": "固定尺寸",
+            "hint": "可选；填写后优先于命令宽高比，例如 1024x1024。留空时发送命令宽高比。",
+            "type": "string",
+            "default": ""
+          },
+          "max_reference_images": {
+            "description": "最大参考图数量",
+            "hint": "限制 /images/edits 上传的参考图数量。",
+            "type": "int",
+            "slider": {
+              "min": 1,
+              "max": 8,
+              "step": 1
+            },
+            "default": 4
+          },
+          "origin": {
+            "description": "Origin 请求头",
+            "hint": "LukaLeng Cloudflare 校验需要浏览器式请求头；通常保持默认。",
+            "type": "string",
+            "default": "https://art.luka77.cc"
+          },
+          "referer": {
+            "description": "Referer 请求头",
+            "hint": "LukaLeng Cloudflare 校验需要浏览器式请求头；通常保持默认。",
+            "type": "string",
+            "default": "https://art.luka77.cc/image"
+          },
+          "user_agent": {
+            "description": "User-Agent 请求头",
+            "hint": "LukaLeng Cloudflare 校验需要浏览器式请求头；通常保持默认。",
+            "type": "string",
+            "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+          },
+          "system_prompt": {
+            "description": "系统提示词",
+            "hint": "可选；会拼接到用户提示词前。",
+            "type": "text",
+            "default": ""
+          }
+        }
+      },
       "custom_http": {
         "name": "自定义 HTTP 接口(Beta)",
         "hint": "高级配置：自定义 JSON 请求体、请求头和响应图片提取路径，适配任意返回 base64、data URL 或图片 URL 的 HTTP 生图接口。",

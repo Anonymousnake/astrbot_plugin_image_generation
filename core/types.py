@@ -18,6 +18,7 @@ class AdapterType(str, enum.Enum):
     AGNES_AI = "agnes_ai"
     JIMENG2API = "jimeng2api"
     GROK = "grok"
+    LUKA = "luka"
     CUSTOM_HTTP = "custom_http"
 
 
