@@ -21,6 +21,9 @@ from .logging_utils import (
 
 LOG = log_prefix("TaskManager")
 DEFAULT_GENERATION_TASK_HISTORY_LIMIT = 100
+DEFAULT_GENERATION_TASK_CONCURRENCY = 1
+DEFAULT_MAX_ACTIVE_GENERATION_TASKS = 2
+GENERATION_QUEUE_FULL_MESSAGE = "队列已满"
 
 
 class GenerationTaskStatus(str, Enum):
@@ -115,6 +118,15 @@ class GenerationTaskRecord:
         return max(0.0, (end_time - self.created_at).total_seconds())
 
 
+@dataclass(frozen=True)
+class GenerationTaskCreateResult:
+    """Result of submitting one generation task to the in-memory queue."""
+
+    accepted: bool
+    record: GenerationTaskRecord | None
+    message: str
+
+
 def _task_name(name: str) -> str:
     """Return a compact task name for logs."""
     return safe_log_text(name, 80)
@@ -146,7 +158,10 @@ class TaskManager:
     """Unified task manager for background, scheduled, and generation tasks."""
 
     def __init__(
-        self, generation_history_limit: int = DEFAULT_GENERATION_TASK_HISTORY_LIMIT
+        self,
+        generation_history_limit: int = DEFAULT_GENERATION_TASK_HISTORY_LIMIT,
+        generation_task_concurrency: int = DEFAULT_GENERATION_TASK_CONCURRENCY,
+        max_active_generation_tasks: int = DEFAULT_MAX_ACTIVE_GENERATION_TASKS,
     ):
         self.background_tasks: set[asyncio.Task] = set()
         self._loop_tasks: dict[str, asyncio.Task] = {}
@@ -157,7 +172,14 @@ class TaskManager:
         ] = []
         self._startup_completed: bool = False
         self._generation_tasks: dict[str, GenerationTaskRecord] = {}
+        self._generation_coroutines: dict[str, Coroutine[Any, Any, Any]] = {}
+        self._generation_queue: list[str] = []
         self._generation_history_limit = max(1, generation_history_limit)
+        self._generation_task_concurrency = max(1, generation_task_concurrency)
+        self._max_active_generation_tasks = max(
+            self._generation_task_concurrency,
+            max_active_generation_tasks,
+        )
 
     def create_task(
         self, coro: Coroutine[Any, Any, Any], name: str | None = None
@@ -184,8 +206,21 @@ class TaskManager:
         resolution: str,
         preset: str | None = None,
         preset_label: str = "预设",
-    ) -> GenerationTaskRecord:
+    ) -> GenerationTaskCreateResult:
         """Create and track an image generation task."""
+        if self._active_generation_task_count() >= self._max_active_generation_tasks:
+            coro.close()
+            logger.info(
+                f"{LOG} 拒绝生图任务: {GENERATION_QUEUE_FULL_MESSAGE} "
+                f"(active={self._active_generation_task_count()}, "
+                f"limit={self._max_active_generation_tasks})"
+            )
+            return GenerationTaskCreateResult(
+                accepted=False,
+                record=None,
+                message=GENERATION_QUEUE_FULL_MESSAGE,
+            )
+
         if task_id in self._generation_tasks:
             logger.warning(f"{LOG} 生图任务 ID 冲突，覆盖旧记录: {_task_name(task_id)}")
 
@@ -202,18 +237,9 @@ class TaskManager:
             preset_label=preset_label,
         )
         self._generation_tasks[task_id] = record
+        self._generation_coroutines[task_id] = coro
+        self._generation_queue.append(task_id)
         self._trim_generation_history()
-
-        task = asyncio.create_task(
-            self._run_generation_task(task_id, coro),
-            name=f"image_generation:{task_id}",
-        )
-        record.task = task
-        self.background_tasks.add(task)
-        task.add_done_callback(self.background_tasks.discard)
-        task.add_done_callback(
-            functools.partial(self._on_generation_task_done, task_id)
-        )
         logger.info(
             f"{log_prefix('Task', task_id)} 已创建生图任务: "
             f"{_task_creation_summary(record)}"
@@ -222,7 +248,12 @@ class TaskManager:
             f"{log_prefix('Task', task_id)} 生图任务提示词摘要: "
             f"提示词={safe_log_text(prompt, 80)}"
         )
-        return record
+        self._dispatch_generation_queue()
+        return GenerationTaskCreateResult(
+            accepted=True,
+            record=record,
+            message="任务已提交",
+        )
 
     async def _run_generation_task(
         self, task_id: str, coro: Coroutine[Any, Any, Any]
@@ -244,9 +275,56 @@ class TaskManager:
             )
 
     def _on_generation_task_done(self, task_id: str, _task: asyncio.Task) -> None:
-        """Detach asyncio task references when a generation task finishes."""
+        """Detach asyncio task references and start the next queued task."""
         if record := self._generation_tasks.get(task_id):
             record.task = None
+        self._generation_coroutines.pop(task_id, None)
+        self._dispatch_generation_queue()
+
+    def _active_generation_task_count(self) -> int:
+        """Return active queued/running/cancelling generation task count."""
+        return sum(1 for record in self._generation_tasks.values() if record.is_active)
+
+    def _running_generation_task_count(self) -> int:
+        """Return generation tasks with live asyncio workers."""
+        return sum(
+            1
+            for record in self._generation_tasks.values()
+            if record.task is not None and not record.task.done()
+        )
+
+    def _dispatch_generation_queue(self) -> None:
+        """Start queued generation tasks up to the configured concurrency."""
+        while (
+            self._generation_queue
+            and self._running_generation_task_count() < self._generation_task_concurrency
+        ):
+            task_id = self._generation_queue.pop(0)
+            record = self._generation_tasks.get(task_id)
+            coro = self._generation_coroutines.pop(task_id, None)
+            if not record:
+                if coro:
+                    coro.close()
+                continue
+            if record.status != GenerationTaskStatus.QUEUED:
+                if coro:
+                    coro.close()
+                continue
+            if coro is None:
+                self.mark_generation_task_failed(task_id, "任务协程不存在")
+                continue
+
+            self.mark_generation_task_running(task_id)
+            task = asyncio.create_task(
+                self._run_generation_task(task_id, coro),
+                name=f"image_generation:{task_id}",
+            )
+            record.task = task
+            self.background_tasks.add(task)
+            task.add_done_callback(self.background_tasks.discard)
+            task.add_done_callback(
+                functools.partial(self._on_generation_task_done, task_id)
+            )
 
     def mark_generation_task_running(self, task_id: str) -> None:
         """Mark a generation task as actively running."""
@@ -426,6 +504,15 @@ class TaskManager:
             return False, "❌ 不能取消其他会话的生图任务"
         if not record.is_active:
             return False, f"❌ 任务已结束，当前状态: {record.status_label}"
+
+        if record.status == GenerationTaskStatus.QUEUED:
+            logger.debug(f"{log_prefix('Task', task_id)} 收到取消排队生图任务请求")
+            if task_id in self._generation_queue:
+                self._generation_queue.remove(task_id)
+            if coro := self._generation_coroutines.pop(task_id, None):
+                coro.close()
+            self.mark_generation_task_cancelled(task_id)
+            return True, f"✅ 任务已取消: {task_id}"
 
         record.status = GenerationTaskStatus.CANCELLING
         record.message = "正在取消任务"
@@ -658,6 +745,12 @@ class TaskManager:
 
     async def cancel_all(self):
         """取消所有正在运行的任务。"""
+        for task_id in list(self._generation_queue):
+            if coro := self._generation_coroutines.pop(task_id, None):
+                coro.close()
+            self.mark_generation_task_cancelled(task_id, "任务已取消")
+        self._generation_queue.clear()
+
         for task in list(self.background_tasks):
             if not task.done():
                 task.cancel()
@@ -669,4 +762,6 @@ class TaskManager:
         self._loop_tasks.clear()
         self._daily_tasks.clear()
         self._last_run_dates.clear()
+        self._generation_coroutines.clear()
+        self._generation_queue.clear()
         logger.debug(f"{LOG} 所有后台任务已取消")

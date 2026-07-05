@@ -42,6 +42,7 @@ class PublicAPIResultCode(str, Enum):
     TEMPLATE_NOT_FOUND = "template_not_found"
     EMPTY_PROMPT = "empty_prompt"
     RATE_LIMITED = "rate_limited"
+    QUEUE_FULL = "queue_full"
     PROMPT_BLOCKED = "prompt_blocked"
     CANCEL_REQUESTED = "cancel_requested"
     CANCEL_FAILED = "cancel_failed"
@@ -249,7 +250,7 @@ class ImageGenerationPublicAPI:
             matched_presets,
             matched_personas,
         )
-        record = plugin.create_generation_task(
+        result = plugin.create_generation_task(
             task_id=task_id,
             source=request_source,
             prompt=final_prompt,
@@ -265,6 +266,13 @@ class ImageGenerationPublicAPI:
             personas=matched_personas,
             auto_send=False,
         )
+        if not result.accepted or not result.record:
+            return self._submit_error(
+                PublicAPIResultCode.QUEUE_FULL,
+                result.message,
+            )
+
+        record = result.record
         return ImageGenerationSubmitResult(
             ok=True,
             code=PublicAPIResultCode.ACCEPTED.value,

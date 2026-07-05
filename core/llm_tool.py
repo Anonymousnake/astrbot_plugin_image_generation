@@ -336,7 +336,7 @@ async def _start_generation_task(
 
     reference_image_count = len(images_data)
 
-    plugin.create_generation_task(
+    result = plugin.create_generation_task(
         task_id=task_id,
         source="LLM工具",
         prompt=prompt,
@@ -352,6 +352,8 @@ async def _start_generation_task(
         personas=personas,
         source_event=event,
     )
+    if not result.accepted:
+        return result.message
 
     return plugin.llm_result_handler.format_tool_start_result(
         prompt=prompt,

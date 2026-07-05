@@ -56,7 +56,7 @@ from .core.result_formatter import (
 )
 from .core.safety_auditor import SafetyAuditor
 from .core.task_id import new_task_id
-from .core.task_manager import GenerationTaskRecord, TaskManager
+from .core.task_manager import GenerationTaskCreateResult, GenerationTaskRecord, TaskManager
 from .core.template_utils import (
     find_named_entry,
     format_template_summary,
@@ -295,7 +295,7 @@ class ImageGenerationPlugin(Star):
         personas: list[str] | None = None,
         source_event: AstrMessageEvent | None = None,
         auto_send: bool = True,
-    ) -> GenerationTaskRecord:
+    ) -> GenerationTaskCreateResult:
         """Create and track an image generation task in the unified task manager."""
         if preset is None:
             preset, preset_label = self._format_template_summary(
@@ -303,7 +303,7 @@ class ImageGenerationPlugin(Star):
                 personas or [],
             )
         image_count = self.normalize_image_count(image_count)
-        record = self.task_manager.create_generation_task(
+        result = self.task_manager.create_generation_task(
             self._generate_and_send_image_async(
                 prompt=prompt,
                 images_data=images_data or None,
@@ -327,12 +327,22 @@ class ImageGenerationPlugin(Star):
             preset=preset,
             preset_label=preset_label,
         )
-        if source == "LLM工具":
+        if not result.accepted:
+            if unified_msg_origin:
+                self.usage_manager.release_reserved_usage(
+                    unified_msg_origin,
+                    is_admin=is_usage_limit_admin,
+                    count=image_count,
+                )
+            return result
+
+        record = result.record
+        if record and source == "LLM工具":
             self.llm_result_handler.attach_task_wakeup(
                 record,
                 source_event=source_event,
             )
-        return record
+        return result
 
     def is_usage_limit_admin(self, event: AstrMessageEvent) -> bool:
         """Return whether an event sender is an AstrBot admin for usage limits."""
@@ -1197,22 +1207,7 @@ class ImageGenerationPlugin(Star):
 
         reference_image_count = len(images_data or [])
 
-        msg = self.format_start_task_message(
-            prompt=prompt,
-            reference_image_count=reference_image_count,
-            image_count=image_count,
-            preset=preset_or_persona,
-            preset_label=preset_label,
-            presets=matched_presets,
-            personas=matched_personas,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            task_id=task_id,
-        )
-        if msg:
-            yield event.plain_result(msg)
-
-        self.create_generation_task(
+        result = self.create_generation_task(
             task_id=task_id,
             source="指令",
             prompt=prompt,
@@ -1227,6 +1222,24 @@ class ImageGenerationPlugin(Star):
             presets=matched_presets,
             personas=matched_personas,
         )
+        if not result.accepted:
+            yield event.plain_result(result.message)
+            return
+
+        msg = self.format_start_task_message(
+            prompt=prompt,
+            reference_image_count=reference_image_count,
+            image_count=image_count,
+            preset=preset_or_persona,
+            preset_label=preset_label,
+            presets=matched_presets,
+            personas=matched_personas,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            task_id=task_id,
+        )
+        if msg:
+            yield event.plain_result(msg)
 
     @filter.command("生图模型")
     async def model_command(self, event: AstrMessageEvent, model_index: str = ""):
