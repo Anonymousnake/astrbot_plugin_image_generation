@@ -1,12 +1,17 @@
 import sys
 import unittest
+import os
 from pathlib import Path
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-ASTRBOT_ROOT = Path(r"D:\Codex\AstrBot")
-for path in (PLUGIN_ROOT.parent, ASTRBOT_ROOT):
-    if str(path) not in sys.path:
+ASTRBOT_ROOT_CANDIDATES = [
+    Path(os.environ["ASTRBOT_ROOT"]) if os.environ.get("ASTRBOT_ROOT") else None,
+    Path("/home/ubuntu/AstrBot"),
+    Path(r"D:\Codex\AstrBot"),
+]
+for path in [PLUGIN_ROOT.parent, *ASTRBOT_ROOT_CANDIDATES]:
+    if path and path.exists() and str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
 import astrbot_plugin_image_generation.main  # noqa: F401
