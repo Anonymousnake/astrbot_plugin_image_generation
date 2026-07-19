@@ -1,6 +1,8 @@
 import sys
 import unittest
 import os
+import json
+import time
 from pathlib import Path
 
 
@@ -87,6 +89,34 @@ class LukaAdapterTests(unittest.TestCase):
         self.assertIn("User-Agent", json_headers)
         self.assertEqual(json_headers["Content-Type"], "application/json")
         self.assertNotIn("Content-Type", form_headers)
+
+    def test_token_file_overrides_static_key_and_reloads(self) -> None:
+        temp = Path(self._get_temp_dir()) / "luka-token.json"
+        temp.write_text(json.dumps({"access_token": "first-token"}), encoding="utf-8")
+        adapter = LukaAdapter(
+            AdapterConfig(type=AdapterType.LUKA, api_keys=["static-token"], extra={"token_file": str(temp)})
+        )
+        self.assertEqual(adapter._get_current_api_key(), "first-token")
+        time.sleep(0.002)
+        temp.write_text(json.dumps({"access_token": "second-token"}), encoding="utf-8")
+        self.assertEqual(adapter._get_current_api_key(), "second-token")
+
+    def test_invalid_token_file_falls_back_to_static_key(self) -> None:
+        temp = Path(self._get_temp_dir()) / "invalid-token.json"
+        temp.write_text("not json", encoding="utf-8")
+        adapter = LukaAdapter(
+            AdapterConfig(type=AdapterType.LUKA, api_keys=["static-token"], extra={"token_file": str(temp)})
+        )
+        self.assertEqual(adapter._get_current_api_key(), "static-token")
+
+    def test_auth_failure_is_not_retryable(self) -> None:
+        adapter = LukaAdapter(AdapterConfig(type=AdapterType.LUKA, api_keys=["static-token"]))
+        self.assertFalse(adapter._is_retryable_error("未登录或权限不足"))
+
+    def _get_temp_dir(self) -> str:
+        import tempfile
+
+        return tempfile.mkdtemp(prefix="luka-adapter-")
 
     def test_uses_edits_endpoint_and_multipart_for_reference_images(self) -> None:
         adapter = LukaAdapter(

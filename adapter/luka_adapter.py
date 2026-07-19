@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import json
+from pathlib import Path
 import time
 from typing import Any
 
@@ -37,6 +39,50 @@ class LukaAdapter(BaseImageAdapter):
         "image/webp": "webp",
         "image/gif": "gif",
     }
+    AUTH_FAILURE_MARKERS = (
+        "unauthorized",
+        "forbidden",
+        "token expired",
+        "not logged in",
+        "未登录",
+        "权限不足",
+        "登录过期",
+        "认证失败",
+    )
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._token_file_marker: tuple[int, int] | None = None
+        self._token_file_value = ""
+
+    def _get_current_api_key(self) -> str:
+        """Prefer a server-managed OAuth token without logging its value."""
+        raw_path = str(self.config.extra.get("token_file") or "").strip()
+        if raw_path:
+            path = Path(raw_path).expanduser()
+            try:
+                stat = path.stat()
+                marker = (stat.st_mtime_ns, stat.st_size)
+                if marker != self._token_file_marker:
+                    data = json.loads(path.read_text(encoding="utf-8-sig"))
+                    if not isinstance(data, dict):
+                        raise ValueError("token file is not an object")
+                    self._token_file_value = str(
+                        data.get("access_token") or data.get("token") or ""
+                    ).strip()
+                    self._token_file_marker = marker
+                if self._token_file_value:
+                    return self._token_file_value
+            except (OSError, ValueError, json.JSONDecodeError):
+                self._token_file_marker = None
+                self._token_file_value = ""
+        return super()._get_current_api_key()
+
+    def _is_retryable_error(self, error: str) -> bool:
+        normalized = str(error or "").lower()
+        if any(marker in normalized for marker in self.AUTH_FAILURE_MARKERS):
+            return False
+        return super()._is_retryable_error(error)
 
     def get_capabilities(self) -> ImageCapability:
         """获取适配器支持的功能。"""

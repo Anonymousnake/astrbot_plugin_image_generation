@@ -928,6 +928,12 @@
             "type": "list",
             "default": []
           },
+          "token_file": {
+            "description": "服务器 OAuth Token 文件",
+            "hint": "可选。存在时优先读取 JSON 中的 access_token；文件由多站签到 OAuth 恢复器原子更新，不要填写 token 内容。",
+            "type": "string",
+            "default": ""
+          },
           "available_models": {
             "description": "可用模型列表",
             "hint": "用于 /生图模型 命令切换；LukaLeng 当前默认 gpt-image-2。",
